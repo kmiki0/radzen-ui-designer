@@ -1,0 +1,12 @@
+// Cloudflare Workers の静的アセットとして配信する設定。
+// 先に `dotnet publish RadzenUiDesigner -c Release -o publish -p:CompressionEnabled=false` で
+// publish/wwwroot を作ってから `npx wrangler deploy` する。
+{
+  "name": "radzen-ui-designer",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./publish/wwwroot",
+    // index.html 以外のパスに来たときも index.html を返し、Blazor 側のルーティングに任せる
+    "not_found_handling": "single-page-application"
+  }
+}
