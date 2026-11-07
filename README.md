@@ -45,6 +45,21 @@ dotnet test
 
 編集の処理（追加・移動・削除・元に戻す）と、コードの生成（変数名がぶつかる場合や予約語の扱い、行の範囲）を確かめる。
 
+## Cloudflare に公開する
+
+公開先は <https://radzen-ui-designer.kmiki-info.workers.dev>。Cloudflare Workers の静的アセットとして配信する。設定は `wrangler.jsonc` にある。
+
+`main` に push すると、GitHub Actions（`.github/workflows/deploy.yml`）がテストとビルドをしてから公開する。リポジトリの Secrets に `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` が必要。
+
+手元から公開するときは、次を実行する。
+
+```
+dotnet publish RadzenUiDesigner -c Release -o publish -p:CompressionEnabled=false
+npx wrangler deploy
+```
+
+`-p:CompressionEnabled=false` を付けると、`.br` と `.gz` のファイルを作らない。Cloudflare は配信するときに自分で圧縮するので、これらは使わない。初めて公開するときは、先に `npx wrangler login` でログインしておく。
+
 ## 構成
 
 | 場所 | 中身 |
