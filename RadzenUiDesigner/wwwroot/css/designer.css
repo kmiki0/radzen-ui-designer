@@ -1,0 +1,815 @@
+/* Radzen UI デザイナー（Pages/Designer.razor）
+   配置は Google Stitch に合わせる。左に部品とレイヤーのサイドバー、その右（.dz-stage）の下端にコードのボトムバー、
+   残り（.dz-area）に無限キャンバスを置き、ほかのパネルはキャンバスの上に浮かせる。
+   色・角の丸み・影・文字は Radzen のテーマの変数（--rz-*）から取るので、テーマを替えると一緒に変わる。
+   フレームの中は Radzen の部品で、ドラッグ中の目印は body の直下に作るので、CSS 分離ではなく全体の CSS に置く。 */
+
+.dz-app {
+    --dz-primary: var(--rz-primary, #4340d2);
+    --dz-primary-light: var(--rz-primary-light, #6966db);
+    --dz-primary-lighter: var(--rz-primary-lighter, rgb(67 64 210 / 0.12));
+    --dz-secondary: var(--rz-secondary, #e31c65);
+    --dz-on-primary: var(--rz-on-primary, #fff);
+    --dz-surface: var(--rz-base-background-color, #fff);
+    --dz-field: var(--rz-base-100, #f5f5f5);
+    --dz-field-hover: var(--rz-base-200, #eee);
+    --dz-line: var(--rz-base-300, #e0e0e0);
+    --dz-text: var(--rz-text-color, #424242);
+    --dz-strong: var(--rz-base-900, #212121);
+    --dz-muted: var(--rz-text-tertiary-color, #757575);
+    --dz-faint: var(--rz-base-500, #9e9e9e);
+    --dz-sel: var(--dz-primary);          /* 選択枠 */
+    --dz-hover: var(--dz-secondary);      /* ホバー枠 */
+    /* 光る縁の色。Radzen のグラフの色（series-8 / series-9）と primary・secondary をつなぐ */
+    --dz-grad: linear-gradient(115deg, var(--rz-series-8, #4fc3f7), var(--dz-primary) 40%, var(--rz-series-9, #7f5cce) 70%, var(--dz-secondary));
+    --dz-shadow: var(--rz-shadow-3);
+    --dz-shadow-panel: var(--rz-shadow-6);
+    --dz-radius-panel: var(--rz-border-radius-5, 1.25rem);
+    --dz-radius-field: var(--rz-border-radius-2, 0.5rem);
+
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--rz-base-200, #eee);
+    color: var(--dz-text);
+    font-family: var(--rz-text-font-family, Roboto, sans-serif);
+}
+.dz-fill { flex: 1; }
+
+/* 浮いているパネルの共通 */
+.dz-chrome {
+    position: absolute;
+    z-index: 30;
+    font-size: 13px;
+    line-height: 1.4;
+}
+.dz-chrome button { font: inherit; color: inherit; cursor: pointer; }
+.dz-chrome button:disabled { cursor: default; }
+.dz-chrome .rzi { font-size: 20px; }
+.dz-pill {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 999px;
+    background: var(--dz-surface);
+    box-shadow: var(--dz-shadow);
+}
+.dz-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-radius: var(--dz-radius-panel);
+    background: var(--dz-surface);
+    box-shadow: var(--dz-shadow-panel);
+    overflow: hidden;
+}
+.dz-ibtn {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--dz-text) !important;
+}
+.dz-ibtn:hover:not(:disabled) { background: var(--dz-field-hover); }
+.dz-ibtn.on { background: var(--dz-primary-lighter); color: var(--dz-primary) !important; }
+.dz-ibtn.danger:hover:not(:disabled) { background: var(--rz-danger-lighter, rgb(244 67 54 / 0.12)); color: var(--rz-danger, #f44336) !important; }
+.dz-ibtn:disabled { opacity: 0.35; }
+.dz-x {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--dz-muted) !important;
+}
+.dz-x:hover { background: var(--dz-field-hover); color: var(--dz-text) !important; }
+.dz-x .rzi { font-size: 18px !important; }
+.dz-vsep { width: 1px; height: 24px; margin: 0 4px; background: var(--dz-line); flex: none; }
+
+/* ---- サイドバーの右側 */
+.dz-stage {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: var(--dz-side-w);
+    overflow: hidden;
+}
+/* ボトムバーの上の範囲。浮かせるパネルの位置は、ここを基準にする */
+.dz-area {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: var(--dz-bottom-h, 40px);
+    left: 0;
+    overflow: hidden;
+}
+.dz-app { --dz-side-w: 300px; }
+.dz-app.side-closed { --dz-side-w: 64px; }
+.dz-app[data-preview] { --dz-side-w: 0px; }
+
+/* ---- キャンバス */
+.dz-viewport {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    touch-action: none;
+}
+/* Stitch のような光のにじみ。色は primary と secondary とグラフの色 */
+.dz-glow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(40% 50% at 18% 30%, color-mix(in srgb, var(--dz-primary) 13%, transparent), transparent 70%),
+        radial-gradient(35% 45% at 85% 80%, color-mix(in srgb, var(--dz-secondary) 9%, transparent), transparent 70%),
+        radial-gradient(30% 40% at 62% 8%, color-mix(in srgb, var(--rz-series-8, #4fc3f7) 14%, transparent), transparent 70%);
+}
+/* 点の位置と間隔は designer.js がキャンバスに合わせて動かす */
+.dz-dots {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(circle, var(--rz-base-400, #bdbdbd) 1px, transparent 1.4px);
+    background-size: 24px 24px;
+}
+.dz-world {
+    --dz-scale: 1;
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 96px;
+    width: max-content;
+    transform-origin: 0 0;
+}
+.dz-app[data-space] .dz-viewport,
+.dz-app[data-space] .dz-viewport * { cursor: grab !important; }
+.dz-app[data-panning],
+.dz-app[data-panning] * { cursor: grabbing !important; user-select: none !important; }
+
+/* 画面のフレーム。名前の文字は倍率に関係なく同じ大きさに見えるようにする */
+.dz-frame { position: relative; flex: none; }
+.dz-frame-label {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    max-width: 100%;
+    margin-bottom: calc(8px / var(--dz-scale));
+    font-size: calc(12.5px / var(--dz-scale));
+    line-height: 1.3;
+    color: var(--dz-muted);
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+}
+.dz-frame-label .rzi { font-size: 1.3em; }
+.dz-frame-label span { font-weight: 500; color: var(--dz-text); }
+.dz-frame-label small { font-size: 1em; color: var(--dz-faint); }
+.dz-frame[data-dz-active] .dz-frame-label .rzi,
+.dz-frame[data-dz-active] .dz-frame-label span { color: var(--dz-primary); }
+.dz-screen {
+    padding: 20px;
+    border-radius: 14px;
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, #424242);
+    font-size: var(--rz-body-font-size, 1rem);
+    line-height: 1.5;
+    box-shadow: var(--rz-shadow-2);
+    overflow: hidden;
+}
+.dz-frame[data-dz-active] .dz-screen {
+    box-shadow: var(--rz-shadow-2), 0 0 0 calc(2px / var(--dz-scale)) color-mix(in srgb, var(--dz-primary) 35%, transparent);
+}
+.dz-root { min-height: 16rem; }
+.dz-screen * { cursor: default; }
+.dz-app[data-preview] .dz-screen * { cursor: revert; }
+
+.dz-empty {
+    padding: 0.75rem;
+    min-width: 8rem;
+    border: 1px dashed var(--rz-base-400, #bdbdbd);
+    border-radius: var(--dz-radius-field);
+    color: var(--dz-muted);
+    font-size: 12px;
+    text-align: center;
+}
+.dz-empty-root {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 4rem 1rem;
+    font-size: 14px;
+}
+.dz-empty-root .rzi { font-size: 36px; color: var(--dz-primary-light); }
+
+/* 選択枠・ホバー枠（designer.js が .dz-overlay の中に作る） */
+.dz-overlay { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+.dz-app[data-preview] .dz-overlay { display: none; }
+.dz-ov-sel, .dz-ov-hover { position: absolute; display: none; pointer-events: none; box-sizing: border-box; }
+.dz-ov-hover { outline: 1.5px solid var(--dz-hover); outline-offset: 1px; border-radius: 2px; }
+.dz-ov-sel { outline: 2px solid var(--dz-sel); outline-offset: 1px; }
+.dz-ov-chip {
+    position: absolute;
+    left: -2px;
+    bottom: 100%;
+    margin-bottom: 5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--dz-hover);
+    color: #fff;
+    font: 500 11.5px/22px var(--rz-text-font-family, Roboto, sans-serif);
+    white-space: nowrap;
+}
+.dz-ov-sel .dz-ov-bar {
+    position: absolute;
+    left: -3px;
+    bottom: 100%;
+    margin-bottom: 6px;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 999px;
+    background: var(--dz-sel);
+    box-shadow: var(--rz-shadow-2);
+    pointer-events: auto;
+}
+.dz-ov-sel.bar-inside .dz-ov-bar { bottom: auto; top: 4px; left: 4px; margin: 0; }
+.dz-ov-hover.bar-inside .dz-ov-chip { bottom: auto; top: 3px; left: 3px; margin: 0; }
+.dz-ov-sel .dz-ov-chip { position: static; margin: 0; background: none; cursor: grab; }
+.dz-ov-sel .dz-ov-chip .rzi { font-size: 14px; }
+.dz-ov-bar button {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--dz-on-primary) !important;
+    cursor: pointer;
+}
+.dz-ov-bar button:hover { background: rgb(255 255 255 / 0.2); }
+.dz-ov-bar button .rzi { font-size: 14px; }
+.dz-h {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--dz-sel);
+    pointer-events: auto;
+}
+.dz-h-r { right: -6px; top: calc(50% - 5px); cursor: ew-resize; }
+.dz-h-b { bottom: -6px; left: calc(50% - 5px); cursor: ns-resize; }
+.dz-h-rb { right: -6px; bottom: -6px; cursor: nwse-resize; }
+body.dz-dragging .dz-overlay, body.dz-dragging .dz-overlay * { pointer-events: none !important; }
+
+/* ---- 左: サイドバー（部品とレイヤー） */
+.dz-side {
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    width: var(--dz-side-w);
+    background: var(--dz-surface);
+    border-right: 1px solid var(--dz-line);
+}
+.dz-side-head { display: flex; align-items: center; gap: 4px; flex: none; padding: 14px 8px 10px 14px; }
+.dz-brand { display: grid; place-items: center; flex: none; text-decoration: none; }
+.dz-logo {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--dz-grad);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+}
+.dz-title { display: flex; flex-direction: column; flex: 1; min-width: 0; margin: 0 4px 0 8px; line-height: 1.25; white-space: nowrap; }
+.dz-title strong { font-size: 14px; font-weight: 500; color: var(--dz-strong); overflow: hidden; text-overflow: ellipsis; }
+.dz-title small { display: flex; align-items: center; gap: 3px; font-size: 11.5px; color: var(--dz-muted); }
+.dz-title small .rzi { font-size: 14px; color: var(--rz-success, #4caf50); }
+.dz-side-tabs {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    margin: 2px 14px 10px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--dz-field);
+}
+.dz-side-tabs button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex: 1;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--dz-muted) !important;
+    font-weight: 500 !important;
+}
+.dz-side-tabs button .rzi { font-size: 17px; }
+.dz-side-tabs button small { font-size: 11px; font-weight: 400; color: var(--dz-faint); }
+.dz-side-tabs button.on { background: var(--dz-surface); color: var(--dz-primary) !important; box-shadow: var(--rz-shadow-1); }
+.dz-side-tabs button.on small { color: var(--dz-primary-light); }
+.dz-side-body { flex: 1; min-height: 0; overflow: auto; padding: 0 12px 14px; }
+.dz-side-foot { display: flex; gap: 6px; flex: none; padding: 10px 12px 12px; border-top: 1px solid var(--dz-line); }
+.dz-foot-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex: 1;
+    height: 34px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--dz-field);
+    color: var(--dz-text) !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+}
+.dz-foot-btn .rzi { font-size: 17px; }
+.dz-foot-btn:hover:not(:disabled) { background: var(--dz-primary-lighter); color: var(--dz-primary) !important; }
+.dz-foot-btn.danger:hover:not(:disabled) { background: var(--rz-danger-lighter, rgb(244 67 54 / 0.12)); color: var(--rz-danger, #f44336) !important; }
+.dz-foot-btn:disabled { opacity: 0.4; }
+
+/* 畳んだサイドバー（アイコンだけの列） */
+.dz-side.closed { align-items: center; gap: 6px; padding: 14px 0 12px; }
+.dz-side.closed .dz-brand { margin-bottom: 8px; }
+.dz-rail-btn {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    color: var(--dz-text) !important;
+}
+.dz-rail-btn:hover { background: var(--dz-primary-lighter); color: var(--dz-primary) !important; }
+.dz-rail-btn .rzi { font-size: 22px; }
+
+/* ---- 左上: 元に戻す・やり直す */
+.dz-top-left { left: 16px; top: 16px; }
+
+/* ---- 右上: プレビュー */
+.dz-top-right { right: 16px; top: 16px; display: flex; align-items: center; gap: 8px; }
+.dz-pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 38px;
+    padding: 0 16px 0 12px;
+    font-size: 13px !important;
+    border: 0;
+    border-radius: 999px;
+    background: var(--dz-surface);
+    box-shadow: var(--dz-shadow);
+    color: var(--dz-text) !important;
+    font-weight: 500 !important;
+    white-space: nowrap;
+}
+.dz-pill-btn .rzi { font-size: 18px; }
+.dz-pill-btn:hover { background: var(--dz-field); }
+.dz-pill-btn.on { background: var(--dz-primary-lighter); color: var(--dz-primary) !important; }
+.dz-pill-btn.primary { background: var(--dz-primary); color: var(--dz-on-primary) !important; }
+.dz-pill-btn.primary:hover { background: var(--rz-primary-dark, #3633a8); }
+
+/* ---- パネルの見出し（操作の一覧で使う） */
+.dz-panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex: none;
+    padding: 14px 10px 6px 18px;
+}
+.dz-panel-head strong { font-size: 15px; font-weight: 500; color: var(--dz-strong); }
+.dz-panel-head small { flex: 1; color: var(--dz-muted); font-size: 11.5px; }
+.dz-panel-head .dz-x { align-self: center; margin-left: auto; }
+.dz-find {
+    position: relative;
+    flex: none;
+    margin: 4px 14px 8px;
+}
+.dz-find .rzi { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 18px !important; color: var(--dz-faint); }
+.dz-find input {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px 0 34px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: var(--dz-field);
+    color: var(--dz-text);
+    font: inherit;
+    outline: none;
+}
+.dz-find input:focus { border-color: var(--dz-primary); background: var(--dz-surface); }
+
+.dz-cat { margin: 10px 6px 6px; color: var(--dz-muted); font-size: 11.5px; font-weight: 500; letter-spacing: 0.04em; }
+.dz-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.dz-tile {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: var(--dz-field);
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+.dz-tile .rzi { grid-row: span 2; font-size: 22px !important; color: var(--dz-muted); }
+.dz-tile b { font-size: 12.5px; font-weight: 500; color: var(--dz-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-tile small { font-size: 11px; color: var(--dz-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-tile:hover { background: var(--dz-primary-lighter); }
+.dz-tile:hover .rzi { color: var(--dz-primary); }
+
+/* 三角の開閉マーク */
+.dz-tri {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin: 0 6px 0 2px;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 5px solid var(--dz-faint);
+    transition: transform 0.12s;
+    flex: none;
+}
+.dz-tri.open { transform: rotate(90deg); }
+.dz-tri.none { visibility: hidden; }
+
+/* レイヤー */
+.dz-side-body.dz-tree { padding: 0 8px 14px; }
+.dz-node {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding-right: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    white-space: nowrap;
+}
+.dz-node:hover { background: var(--dz-field); }
+.dz-node.selected { background: var(--dz-primary-lighter); color: var(--dz-primary); }
+.dz-node.selected .dz-tri { border-left-color: var(--dz-primary); }
+.dz-node .dz-tri { cursor: pointer; padding: 4px 0; box-sizing: content-box; }
+.dz-node-icon { font-size: 17px !important; color: var(--dz-muted); flex: none; }
+.dz-node.selected .dz-node-icon { color: var(--dz-primary); }
+.dz-node-name { font-weight: 500; }
+.dz-node small { color: var(--dz-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; margin-left: 4px; }
+.dz-muted-note { color: var(--dz-muted); padding: 4px 12px; font-size: 12px; }
+
+/* ---- 右: 選んだ部品のプロパティ */
+.dz-inspector { right: 16px; top: 84px; bottom: 16px; width: 336px; }
+.dz-insp-head { display: flex; align-items: center; gap: 10px; flex: none; padding: 14px 10px 4px 14px; }
+.dz-insp-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    flex: none;
+    border-radius: 10px;
+    background: var(--dz-primary-lighter);
+    color: var(--dz-primary);
+}
+.dz-insp-name { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.25; }
+.dz-insp-name strong { font-size: 15px; font-weight: 500; color: var(--dz-strong); overflow: hidden; text-overflow: ellipsis; }
+.dz-insp-name small { color: var(--dz-muted); font-size: 11.5px; }
+.dz-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    flex: none;
+    padding: 4px 16px 8px;
+    font-size: 12px;
+}
+.dz-crumbs button { border: 0; background: none; padding: 0; color: var(--dz-primary) !important; }
+.dz-crumbs button:hover { text-decoration: underline; }
+.dz-crumb-sep { color: var(--dz-faint); margin: 0 3px; }
+.dz-crumbs strong { font-weight: 500; color: var(--dz-strong); }
+.dz-ptabs {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    margin: 0 14px 6px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--dz-field);
+}
+.dz-ptabs button {
+    flex: 1;
+    height: 30px;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--dz-muted) !important;
+    font-weight: 500 !important;
+}
+.dz-ptabs button.on { background: var(--dz-surface); color: var(--dz-primary) !important; box-shadow: var(--rz-shadow-1); }
+.dz-pbody { flex: 1; min-height: 0; overflow: auto; padding-bottom: 16px; }
+.dz-psec {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px 16px 6px;
+    border: 0;
+    border-top: 1px solid var(--dz-line);
+    background: none;
+    color: var(--dz-muted) !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.04em;
+    text-align: left;
+}
+.dz-pbody > .dz-psec:first-child { border-top: 0; margin-top: 0; }
+.dz-row {
+    display: grid;
+    grid-template-columns: 100px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 3px 16px;
+}
+.dz-row > label { display: flex; flex-direction: column; margin: 0; line-height: 1.2; min-width: 0; }
+.dz-row > label span { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-row > label code { font-size: 10.5px; color: var(--dz-faint); background: none; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-row.set > label span { font-weight: 500; color: var(--dz-primary); }
+.dz-row-wide { grid-template-columns: 1fr; }
+.dz-row-wide textarea { height: auto; padding: 6px 10px; resize: vertical; }
+.dz-ctl { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.dz-ctl > .dz-input { flex: 1; width: 100%; }
+.dz-input {
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: var(--dz-radius-field);
+    background: var(--dz-field);
+    color: var(--dz-text);
+    font: inherit;
+    font-size: 12.5px;
+    outline: none;
+    min-width: 0;
+}
+.dz-input:hover { background: var(--dz-field-hover); }
+.dz-input:focus { border-color: var(--dz-primary); background: var(--dz-surface); }
+.dz-mono { font-family: Consolas, "Cascadia Mono", monospace !important; }
+.dz-reset {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--dz-field-hover);
+    color: var(--dz-muted) !important;
+    font-size: 12px !important;
+    line-height: 20px;
+}
+.dz-reset:hover { background: var(--dz-line); color: var(--dz-text) !important; }
+.dz-segs { display: flex; flex: 1; padding: 3px; border-radius: var(--dz-radius-field); background: var(--dz-field); }
+.dz-segs button {
+    flex: 1;
+    min-width: 0;
+    height: 26px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--dz-muted) !important;
+    font-size: 12px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dz-segs button.on { background: var(--dz-surface); color: var(--dz-primary) !important; font-weight: 500 !important; box-shadow: var(--rz-shadow-1); }
+.dz-color { flex: none; width: 32px; height: 32px; padding: 3px; border: 0; border-radius: var(--dz-radius-field); background: var(--dz-field); }
+.dz-help { padding: 4px 16px; color: var(--dz-muted); font-size: 12px; line-height: 1.6; }
+.dz-help.dz-warn { color: var(--rz-danger, #f44336); }
+.dz-input.invalid { border-color: var(--rz-danger, #f44336); }
+
+/* ---- 下: コードのボトムバー（サイドバーと同じように端に付ける） */
+.dz-bottom {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 35;
+    display: flex;
+    flex-direction: column;
+    height: var(--dz-bottom-h, 40px);
+    background: var(--dz-surface);
+    border-top: 1px solid var(--dz-line);
+}
+.dz-bottom-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    height: 39px;
+    padding: 0 10px 0 4px;
+    cursor: pointer;
+    user-select: none;
+}
+.dz-bottom.open .dz-bottom-bar { border-bottom: 1px solid var(--dz-line); }
+.dz-bottom-bar:hover { background: var(--dz-field); }
+.dz-bottom-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    align-self: stretch;
+    padding: 0 12px;
+    color: var(--dz-text);
+    font-weight: 500;
+}
+.dz-bottom-tab .rzi { font-size: 18px; }
+.dz-bottom.open .dz-bottom-tab { color: var(--dz-primary); box-shadow: inset 0 -2px 0 var(--dz-primary); }
+.dz-bottom-file { color: var(--dz-strong); }
+.dz-bottom-bar small { color: var(--dz-muted); font-size: 11.5px; }
+.dz-bottom-chev { display: grid; place-items: center; width: 28px; height: 28px; color: var(--dz-muted); }
+.dz-bottom-chev .rzi { font-size: 22px !important; }
+/* 上の縁。ドラッグで高さを変える */
+.dz-split { position: absolute; left: 0; right: 0; top: -4px; height: 8px; z-index: 1; cursor: ns-resize; }
+.dz-split:hover, body.dz-splitting .dz-split {
+    background: linear-gradient(transparent 3px, var(--dz-primary) 3px, var(--dz-primary) 5px, transparent 5px);
+}
+body.dz-splitting, body.dz-splitting * { cursor: ns-resize !important; user-select: none !important; }
+.dz-tbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--dz-primary-lighter);
+    color: var(--dz-primary) !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+}
+.dz-tbtn .rzi { font-size: 16px !important; }
+.dz-tbtn:disabled { opacity: 0.4; }
+.dz-source-code {
+    position: relative;   /* 行の offsetTop をこの中の位置にする（選んだ行までのスクロールに使う） */
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 0 14px;
+    counter-reset: dz-line;
+    font: 12.5px/1.6 Consolas, "Cascadia Mono", "BIZ UDGothic", monospace;
+    color: #1f1f1f;
+}
+.dz-ln { white-space: pre; min-height: 1.6em; padding-right: 16px; }
+.dz-ln::before {
+    counter-increment: dz-line;
+    content: counter(dz-line);
+    display: inline-block;
+    width: 3.2em;
+    margin-right: 1.2em;
+    padding-right: 0.4em;
+    text-align: right;
+    color: var(--dz-faint);
+    user-select: none;
+}
+.dz-ln:hover { background: var(--dz-field); }
+/* 部品の行はクリックでその部品を選べる */
+.dz-ln[data-dz-node] { cursor: pointer; }
+/* キャンバスで選んだ部品の行（開始タグから終了タグまで）。行番号の左に primary の線を引く */
+.dz-ln.sel { background: var(--dz-primary-lighter); }
+.dz-ln.sel:hover { background: color-mix(in srgb, var(--dz-primary) 18%, transparent); }
+.dz-ln.sel::before { color: var(--dz-primary); font-weight: 600; box-shadow: inset 3px 0 0 var(--dz-primary); }
+
+/* コードの色（VS Code のライトテーマに合わせる） */
+.hl-punct  { color: #800000; }   /* < /> */
+.hl-tag    { color: #267f99; }   /* 部品のタグ名（クラス） */
+.hl-param  { color: #800080; }   /* 子のタグになるパラメーター */
+.hl-attr   { color: #e50000; }   /* 属性名 */
+.hl-razor  { color: #af00db; }   /* @ / @code / @bind-Value */
+.hl-str    { color: #a31515; }   /* 文字列 */
+.hl-kw     { color: #0000ff; }   /* キーワード（void、true、int、string） */
+.hl-type   { color: #267f99; }   /* 型名（DateTime、ButtonStyle） */
+.hl-member { color: #0070c1; }   /* 列挙型の値 */
+.hl-var    { color: #001080; }   /* 変数・フィールド */
+.hl-method { color: #795e26; }   /* メソッド */
+.hl-num    { color: #098658; }   /* 数値 */
+
+/* ---- 右下: 表示の倍率と操作の一覧。右のパネルを開いているときは、その左に並べる */
+.dz-zoom { right: 16px; bottom: 24px; }
+.dz-app.has-insp .dz-zoom { right: 364px; }
+.dz-zoom-val {
+    min-width: 56px;
+    height: 36px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--dz-text) !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    font-variant-numeric: tabular-nums;
+}
+.dz-zoom-val:hover { background: var(--dz-field-hover); }
+.dz-help-card { right: 16px; bottom: 80px; width: 340px; padding-bottom: 10px; }
+.dz-app.has-insp .dz-help-card { right: 364px; }
+.dz-keys { list-style: none; margin: 0; padding: 0 16px 6px; font-size: 12.5px; }
+.dz-keys li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--dz-field-hover); }
+.dz-keys li > span:first-child { color: var(--dz-muted); }
+.dz-keys kbd {
+    padding: 1px 6px;
+    border: 1px solid var(--dz-line);
+    border-radius: 5px;
+    background: var(--dz-field);
+    color: var(--dz-text);
+    font: 11px Consolas, monospace;
+    box-shadow: none;
+}
+
+/* ---- プレビュー中（部品を実際に操作できる） */
+.dz-app[data-preview] .dz-frame-label .rzi,
+.dz-app[data-preview] .dz-frame-label span { color: var(--dz-muted); }
+
+/* ---- ドラッグ中（body の直下に置くので --rz-* を直接使う） */
+.dz-ghost {
+    position: fixed;
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px 5px 6px;
+    border-radius: 999px;
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, #424242);
+    font: 500 13px var(--rz-text-font-family, Roboto, sans-serif);
+    box-shadow: var(--rz-shadow-4);
+    pointer-events: none;
+    transform: translate(14px, 10px);
+    white-space: nowrap;
+}
+.dz-ghost-plus {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--rz-primary, #4340d2);
+    color: var(--rz-on-primary, #fff);
+    font-weight: 700;
+}
+.dz-indicator {
+    position: fixed;
+    z-index: 9999;
+    display: none;
+    background: var(--rz-secondary, #e31c65);
+    pointer-events: none;
+}
+.dz-indicator::before {
+    content: "+";
+    position: absolute;
+    left: -9px;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    margin-top: -8px;
+    border-radius: 50%;
+    background: var(--rz-secondary, #e31c65);
+    color: #fff;
+    font: 700 13px/16px var(--rz-text-font-family, Roboto, sans-serif);
+    text-align: center;
+}
+.dz-indicator.vertical::before { left: 50%; top: -9px; margin: 0 0 0 -8px; }
+.dz-indicator.box { background: var(--rz-secondary-lighter, rgb(227 28 101 / 0.12)); outline: 2px dashed var(--rz-secondary, #e31c65); }
+.dz-indicator.box::before { left: 50%; top: 50%; margin: -8px 0 0 -8px; }
+body.dz-dragging, body.dz-dragging * { cursor: grabbing !important; user-select: none !important; }
+body.dz-resizing, body.dz-resizing * { user-select: none !important; }

@@ -1,0 +1,185 @@
+@* 左のサイドバー（部品とレイヤー）。Open が false なら、アイコンだけの細い列を出す。
+   部品はクリックで追加、ドラッグでキャンバスに置く（ドラッグは designer.js が data-dz-palette を見て行う）。 *@
+@using Microsoft.AspNetCore.Components.Rendering
+
+@if (Hidden)
+{
+    return;
+}
+
+@if (Open)
+{
+    <aside class="dz-side dz-chrome">
+        <div class="dz-side-head">
+            <span class="dz-brand" title="Radzen UI デザイナー"><span class="dz-logo">R</span></span>
+            <div class="dz-title">
+                <strong>Radzen UI デザイナー</strong>
+                <small><RadzenIcon Icon="cloud_done" />ページ.razor・自動保存</small>
+            </div>
+            <button type="button" class="dz-ibtn" title="サイドバーを畳む" @onclick="() => OpenChanged.InvokeAsync(false)"><RadzenIcon Icon="keyboard_double_arrow_left" /></button>
+        </div>
+        <div class="dz-side-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected="@(Tab == "parts" ? "true" : "false")" class="@(Tab == "parts" ? "on" : "")" @onclick="@(() => TabChanged.InvokeAsync("parts"))">
+                <RadzenIcon Icon="widgets" />部品
+            </button>
+            <button type="button" role="tab" aria-selected="@(Tab == "layers" ? "true" : "false")" class="@(Tab == "layers" ? "on" : "")" @onclick="@(() => TabChanged.InvokeAsync("layers"))">
+                <RadzenIcon Icon="account_tree" />レイヤー<small>@Doc.NodeCount</small>
+            </button>
+        </div>
+        @if (Tab == "parts")
+        {
+            <div class="dz-find">
+                <RadzenIcon Icon="search" />
+                <input type="search" placeholder="部品を検索" value="@toolboxFilter" @oninput="e => toolboxFilter = e.Value?.ToString() ?? string.Empty" />
+            </div>
+            <div class="dz-side-body">
+                @foreach (var group in ComponentCatalog.All.GroupBy(d => d.Category))
+                {
+                    var tools = group.Where(ToolboxMatch).ToList();
+                    if (tools.Count == 0) continue;
+                    <div class="dz-cat">@group.Key</div>
+                    <div class="dz-tiles">
+                        @foreach (var t in tools)
+                        {
+                            <div class="dz-tile" data-dz-palette="@t.Key" data-dz-label="@t.TagName" title="@($"<{t.TagName}>  クリックかドラッグで追加")"
+                                 @onclick="() => Doc.Add(t.Key)">
+                                <RadzenIcon Icon="@t.Icon" />
+                                <b>@t.ShortName</b>
+                                <small>@t.Label</small>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="dz-find">
+                <RadzenIcon Icon="search" />
+                <input type="search" placeholder="要素を検索" value="@outlineFilter" @oninput="e => outlineFilter = e.Value?.ToString() ?? string.Empty" />
+            </div>
+            <div class="dz-side-body dz-tree">
+                @if (Doc.Root.Children.Count == 0)
+                {
+                    <div class="dz-muted-note">まだ部品がありません</div>
+                }
+                @{ RenderTree(__builder, Doc.Root.Children, 0, OutlineVisible()); }
+            </div>
+        }
+        <div class="dz-side-foot">
+            <button type="button" class="dz-foot-btn" title="サンプル（会員登録フォーム）を読み込む" @onclick="LoadSample"><RadzenIcon Icon="auto_awesome" />サンプル</button>
+            <button type="button" class="dz-foot-btn danger" title="全部消す（Ctrl+Z で戻せます）" disabled="@(Doc.Root.Children.Count == 0)" @onclick="ClearAll"><RadzenIcon Icon="delete_sweep" />全部消す</button>
+        </div>
+    </aside>
+}
+else
+{
+    <aside class="dz-side closed dz-chrome">
+        <span class="dz-brand" title="Radzen UI デザイナー"><span class="dz-logo">R</span></span>
+        <button type="button" class="dz-rail-btn" title="部品" @onclick="@(() => OpenTab("parts"))"><RadzenIcon Icon="widgets" /></button>
+        <button type="button" class="dz-rail-btn" title="レイヤー" @onclick="@(() => OpenTab("layers"))"><RadzenIcon Icon="account_tree" /></button>
+        <div class="dz-fill"></div>
+        <button type="button" class="dz-rail-btn" title="サイドバーを開く" @onclick="() => OpenChanged.InvokeAsync(true)"><RadzenIcon Icon="keyboard_double_arrow_right" /></button>
+    </aside>
+}
+
+@code {
+    [Parameter, EditorRequired] public DesignDocument Doc { get; set; } = default!;
+
+    /// <summary>プレビュー中は何も描かない（検索欄などの状態は残す）。</summary>
+    [Parameter] public bool Hidden { get; set; }
+
+    [Parameter] public bool Open { get; set; } = true;
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>"parts"（部品）か "layers"（レイヤー）。</summary>
+    [Parameter] public string Tab { get; set; } = "parts";
+    [Parameter] public EventCallback<string> TabChanged { get; set; }
+
+    /// <summary>画面を丸ごと入れ替えたとき（サンプルの読み込み・全部消す）。親が全体を表示し直す。</summary>
+    [Parameter] public EventCallback OnReplaced { get; set; }
+
+    string toolboxFilter = "";
+    string outlineFilter = "";
+    readonly HashSet<string> collapsed = new();   // レイヤーで閉じた部品
+    string? shownSelection;
+
+    protected override void OnParametersSet()
+    {
+        // 選んだ部品がレイヤーで見えるように、親を開いておく
+        if (Doc.SelectedId == shownSelection) return;
+        shownSelection = Doc.SelectedId;
+        if (Doc.Selected is { } sel)
+            foreach (var a in Doc.Ancestors(sel))
+                collapsed.Remove(a.Id);
+    }
+
+    async Task OpenTab(string tab)
+    {
+        await TabChanged.InvokeAsync(tab);
+        await OpenChanged.InvokeAsync(true);
+    }
+
+    async Task LoadSample()
+    {
+        Doc.Replace(Sample.Create());
+        await OnReplaced.InvokeAsync();
+    }
+
+    async Task ClearAll()
+    {
+        Doc.Replace(DesignDocument.NewRoot());
+        await OnReplaced.InvokeAsync();
+    }
+
+    bool ToolboxMatch(ComponentDef d) =>
+        toolboxFilter.Length == 0
+        || d.TagName.Contains(toolboxFilter, StringComparison.OrdinalIgnoreCase)
+        || d.Label.Contains(toolboxFilter, StringComparison.OrdinalIgnoreCase);
+
+    // ---- レイヤー
+    /// <summary>検索欄に文字があるときに見せる部品（当てはまる部品とその親）。null なら全部見せる。</summary>
+    HashSet<string>? OutlineVisible()
+    {
+        if (outlineFilter.Length == 0) return null;
+        var visible = new HashSet<string>();
+        foreach (var n in Doc.Root.SelfAndDescendants())
+        {
+            if (!ComponentCatalog.TryGet(n.Kind, out var d)) continue;
+            if (!d.TagName.Contains(outlineFilter, StringComparison.OrdinalIgnoreCase)
+                && !d.Label.Contains(outlineFilter, StringComparison.OrdinalIgnoreCase)
+                && !Summary(n).Contains(outlineFilter, StringComparison.OrdinalIgnoreCase)) continue;
+            for (var p = n; p is not null && p != Doc.Root; p = Doc.Root.FindParent(p.Id))
+                visible.Add(p.Id);
+        }
+        return visible;
+    }
+
+    void RenderTree(RenderTreeBuilder __builder, List<DesignNode> nodes, int depth, HashSet<string>? visible)
+    {
+        foreach (var n in nodes)
+        {
+            if (visible is not null && !visible.Contains(n.Id)) continue;
+            if (!ComponentCatalog.TryGet(n.Kind, out var d)) continue;
+            var hasKids = n.Children.Count > 0;
+            var open = visible is not null || !collapsed.Contains(n.Id);
+            <div class="dz-node @(n.Id == Doc.SelectedId ? "selected" : "")" style="padding-left: @(8 + depth * 14)px"
+                 data-dz-tree="@n.Id" data-dz-label="@d.TagName" title="@d.Label" @onclick="() => Doc.Select(n.Id)" @key="n.Id">
+                <span class="dz-tri @(hasKids ? (open ? "open" : "") : "none")" @onclick="() => ToggleCollapse(n.Id)" @onclick:stopPropagation="true"></span>
+                <RadzenIcon Icon="@d.Icon" class="dz-node-icon" />
+                <span class="dz-node-name">@d.ShortName</span>
+                <small>@Summary(n)</small>
+            </div>
+            if (hasKids && open) RenderTree(__builder, n.Children, depth + 1, visible);
+        }
+    }
+
+    void ToggleCollapse(string id)
+    {
+        if (!collapsed.Remove(id)) collapsed.Add(id);
+    }
+
+    static string Summary(DesignNode n) =>
+        n.Props.GetValueOrDefault("Text") ?? n.Props.GetValueOrDefault("Title")
+        ?? n.Props.GetValueOrDefault(DesignNode.VarKey) ?? n.Props.GetValueOrDefault("Icon") ?? "";
+}

@@ -1,0 +1,245 @@
+@page "/"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<PageTitle>Radzen UI デザイナー</PageTitle>
+
+@* 画面の配置は Google Stitch を参考にした。左に部品とレイヤーのサイドバー、下にコードのボトムバーを置き、
+   残りの無限キャンバスに PC の画面のフレームを置く（スマホの画面は右下のボタンで並べる）。
+   ほかの操作パネルはキャンバスの上に浮かせる。色は Radzen のテーマの変数（--rz-*）を使う。
+   キャンバスの移動・拡大縮小・選択・ドラッグは designer.js が行い、編集の処理は DesignDocument が行う。 *@
+<div class="dz-app @(sideOpen ? "" : "side-closed") @(InspectorOpen ? "has-insp" : "")" style="--dz-bottom-h: @(BottomHeight)px"
+     data-preview="@(preview ? "1" : null)" @ref="appEl">
+
+    <DesignerSidebar Doc="doc" Hidden="preview" @bind-Open="sideOpen" @bind-Tab="sideTab" OnReplaced="RequestFit" />
+
+    @* ---- 右側: キャンバスと、その上に浮かせるパネル *@
+    <div class="dz-stage">
+        @* ボトムバーの上の範囲 *@
+        <div class="dz-area">
+            <div class="dz-viewport">
+                <div class="dz-glow"></div>
+                <div class="dz-dots"></div>
+                <div class="dz-world">
+                    @foreach (var f in Frames)
+                    {
+                        if (f.Key == "mobile" && !showMobile) continue;
+                        <section class="dz-frame" data-dz-frame="@f.Key" style="width: @(f.Width)px" @key="f.Key">
+                            <header class="dz-frame-label" data-dz-frame-label="@f.Key" title="ダブルクリックでこの画面に合わせる">
+                                <RadzenIcon Icon="@f.Icon" /><span>ページ.razor</span><small>@f.Label · @(f.Width)px</small>
+                            </header>
+                            <div class="dz-screen" style="min-height: @(f.Height)px">
+                                <div class="dz-root" data-dz-id="root" data-dz-container="1" data-dz-label="ページ" data-dz-tag="ページ">
+                                    <ErrorBoundary @ref="boundaries[f.Key]">
+                                        <ChildContent>@CanvasRenderer.Children(doc.Root, doc.SelectedId)</ChildContent>
+                                        <ErrorContent Context="ex">
+                                            <RadzenAlert AlertStyle="AlertStyle.Danger" AllowClose="false" Title="表示できない設定があります">
+                                                @ex.Message（Ctrl+Z で元に戻せます）
+                                            </RadzenAlert>
+                                        </ErrorContent>
+                                    </ErrorBoundary>
+                                    @if (doc.Root.Children.Count == 0)
+                                    {
+                                        <div class="dz-empty dz-empty-root">
+                                            <RadzenIcon Icon="add_circle" />
+                                            左のサイドバーから部品をドラッグするか、クリックして追加してください
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </section>
+                    }
+                </div>
+                @* 選択枠・ホバー枠は designer.js がここに描く（Blazor は中身に触れない） *@
+                <div class="dz-overlay"></div>
+            </div>
+
+            @* ---- 左上: 元に戻す・やり直す *@
+            @if (!preview)
+            {
+                <div class="dz-top-left dz-pill dz-chrome" data-dz-avoid="top">
+                    <button type="button" class="dz-ibtn" title="元に戻す（Ctrl+Z）" disabled="@(!doc.CanUndo)" @onclick="() => doc.Undo()"><RadzenIcon Icon="undo" /></button>
+                    <button type="button" class="dz-ibtn" title="やり直す（Ctrl+Y）" disabled="@(!doc.CanRedo)" @onclick="() => doc.Redo()"><RadzenIcon Icon="redo" /></button>
+                </div>
+            }
+
+            @* ---- 右上: プレビュー *@
+            <div class="dz-top-right dz-chrome" data-dz-avoid="top">
+                <button type="button" class="dz-pill-btn primary" @onclick="TogglePreview" title="@(preview ? "編集に戻る（Esc）" : "部品を実際に操作して確かめる")">
+                    <RadzenIcon Icon="@(preview ? "edit" : "play_arrow")" />@(preview ? "編集に戻る" : "プレビュー")
+                </button>
+            </div>
+
+            <PropertyPanel Doc="doc" Hidden="preview" />
+
+            @if (helpOpen && !preview)
+            {
+                <HelpCard OnClose="() => helpOpen = false" />
+            }
+
+            @* ---- 右下: 表示の倍率（右のパネルを開いているときは、その左に並べる） *@
+            <div class="dz-zoom dz-pill dz-chrome" data-dz-avoid="bottom">
+                <button type="button" class="dz-ibtn" data-dz-view="out" title="縮小"><RadzenIcon Icon="remove" /></button>
+                <button type="button" class="dz-zoom-val" data-dz-view="reset" data-dz-zoom title="100% にする"></button>
+                <button type="button" class="dz-ibtn" data-dz-view="in" title="拡大"><RadzenIcon Icon="add" /></button>
+                <button type="button" class="dz-ibtn" data-dz-view="fit" title="全体を表示（Shift+1）"><RadzenIcon Icon="fit_screen" /></button>
+                <button type="button" class="dz-ibtn @(showMobile ? "on" : "")" aria-pressed="@(showMobile ? "true" : "false")"
+                        title="@(showMobile ? "スマホの画面を隠す" : "スマホの画面（360px）も並べる")" @onclick="ToggleMobile"><RadzenIcon Icon="smartphone" /></button>
+                @if (!preview)
+                {
+                    <button type="button" class="dz-ibtn @(helpOpen ? "on" : "")" title="操作の一覧" @onclick="() => helpOpen = !helpOpen"><RadzenIcon Icon="keyboard" /></button>
+                }
+            </div>
+        </div>
+
+        <CodePanel Doc="doc" Hidden="preview" @bind-Open="codeOpen" CopyText="CopyText" />
+    </div>
+</div>
+
+@code {
+    const string StorageKey = "radzen-designer:v1";
+
+    /// <summary>キャンバスに並べる画面（スマホは showMobile のときだけ）。Height は白い画面の最小の高さ。</summary>
+    sealed record FrameDef(string Key, string Label, string Icon, int Width, int Height);
+
+    static readonly FrameDef[] Frames =
+    [
+        new("desktop", "PC", "computer", 1280, 720),
+        new("mobile", "スマホ", "smartphone", 360, 720),
+    ];
+
+    readonly DesignDocument doc = new();
+    readonly Dictionary<string, ErrorBoundary> boundaries = new();
+    ElementReference appEl;
+    IJSObjectReference? module;
+    IJSObjectReference? handle;
+    DotNetObjectReference<Designer>? selfRef;
+
+    // 画面の状態
+    bool sideOpen = true;           // サイドバーを開いているか（閉じると細い列になる）
+    string sideTab = "parts";       // parts / layers
+    bool codeOpen;                  // ボトムバー（コード）を開いているか
+    int codeHeight = 300;           // 開いたときのボトムバーの高さ（上の縁のドラッグで変わる）
+    bool helpOpen;
+    bool preview;
+    bool showMobile;                // スマホの画面も並べるか（最初は PC だけ）
+    bool needFit;                   // 次の描画のあとで全体を表示し直す
+
+    /// <summary>ボトムバーの高さ。畳んでいるときは見出しの 1 行分。</summary>
+    int BottomHeight => preview ? 0 : codeOpen ? codeHeight : 40;
+
+    bool InspectorOpen => !preview && doc.Selected is not null;
+
+    protected override void OnInitialized() => doc.Changed += OnDocChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/designer.js");
+            selfRef = DotNetObjectReference.Create(this);
+            handle = await module.InvokeAsync<IJSObjectReference>("init", appEl, selfRef);
+
+            // 保存がなければ（初めて開いたとき）サンプルから始める
+            var json = await module.InvokeAsync<string?>("load", StorageKey);
+            doc.Load(DesignDocument.Deserialize(json) ?? Sample.Create());
+            RequestFit();
+            return;
+        }
+        if (handle is null) return;
+        if (needFit)
+        {
+            needFit = false;
+            await handle.InvokeVoidAsync("fit");
+        }
+        else
+        {
+            // 描き直したら、選択枠とホバー枠の位置を合わせ直す
+            await handle.InvokeVoidAsync("refresh");
+        }
+    }
+
+    /// <summary>画面の中身か選択が変わったとき。中身が変わったら、表示のエラーを解いてから保存する。</summary>
+    void OnDocChanged(bool contentChanged)
+    {
+        if (contentChanged)
+        {
+            foreach (var b in boundaries.Values) b?.Recover();
+            if (module is not null) _ = module.InvokeVoidAsync("save", StorageKey, doc.Serialize()).AsTask();
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>次の描画のあとで、全体が収まるように表示し直す。</summary>
+    void RequestFit()
+    {
+        needFit = true;
+        StateHasChanged();
+    }
+
+    // ---- designer.js から呼ばれる操作
+    [JSInvokable]
+    public void Select(string id) => doc.Select(id);
+
+    [JSInvokable]
+    public void Drop(string source, string key, string parentId, int index) => doc.Drop(source, key, parentId, index);
+
+    [JSInvokable]
+    public void Resize(string id, double? width, double? height) => doc.Resize(id, width, height);
+
+    /// <summary>ボトムバーの上の縁をドラッグして高さを変えたとき。</summary>
+    [JSInvokable]
+    public void SetCodeHeight(int height)
+    {
+        codeHeight = Math.Clamp(height, 120, 2000);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void Key(string command)
+    {
+        switch (command)
+        {
+            case "Delete": doc.DeleteSelected(); break;
+            case "Escape": doc.Select(null); break;
+            case "Undo": doc.Undo(); break;
+            case "Redo": doc.Redo(); break;
+            case "Duplicate": doc.DuplicateSelected(); break;
+            case "MoveUp": doc.MoveSelected(-1); break;
+            case "MoveDown": doc.MoveSelected(1); break;
+            case "SelectParent": doc.SelectParent(); break;
+            case "ExitPreview": if (preview) TogglePreview(); break;
+        }
+    }
+
+    // ---- 表示の切り替え
+    void ToggleMobile()
+    {
+        showMobile = !showMobile;
+        if (!showMobile) boundaries.Remove("mobile");
+        // 並べる画面が変わるので、全体が収まるように合わせ直す
+        RequestFit();
+    }
+
+    void TogglePreview()
+    {
+        preview = !preview;
+        helpOpen = false;
+        // パネルが消える・戻るので、空いた範囲に合わせ直す
+        RequestFit();
+    }
+
+    async Task<bool> CopyText(string text) => module is not null && await module.InvokeAsync<bool>("copyText", text);
+
+    public async ValueTask DisposeAsync()
+    {
+        doc.Changed -= OnDocChanged;
+        try
+        {
+            if (handle is not null) { await handle.InvokeVoidAsync("dispose"); await handle.DisposeAsync(); }
+            if (module is not null) await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+        selfRef?.Dispose();
+    }
+}

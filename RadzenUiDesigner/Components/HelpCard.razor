@@ -1,0 +1,25 @@
+@* 右下の「操作の一覧」ボタンで開くカード *@
+
+<div class="dz-panel dz-help-card dz-chrome">
+    <div class="dz-panel-head">
+        <strong>操作</strong>
+        <button type="button" class="dz-x" title="閉じる" @onclick="OnClose"><RadzenIcon Icon="close" /></button>
+    </div>
+    <ul class="dz-keys">
+        <li><span>上下に動かす</span><span><kbd>ホイール</kbd></span></li>
+        <li><span>左右に動かす</span><span><kbd>Shift</kbd>+<kbd>ホイール</kbd></span></li>
+        <li><span>拡大・縮小</span><span><kbd>Ctrl</kbd>+<kbd>ホイール</kbd></span></li>
+        <li><span>キャンバスの移動</span><span>余白をドラッグ、<kbd>Space</kbd>+ドラッグ</span></li>
+        <li><span>全体を表示</span><span><kbd>Shift</kbd>+<kbd>1</kbd></span></li>
+        <li><span>削除</span><span><kbd>Delete</kbd></span></li>
+        <li><span>元に戻す・やり直す</span><span><kbd>Ctrl</kbd>+<kbd>Z</kbd> <kbd>Ctrl</kbd>+<kbd>Y</kbd></span></li>
+        <li><span>複製</span><span><kbd>Ctrl</kbd>+<kbd>D</kbd></span></li>
+        <li><span>順番の入れ替え</span><span><kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></span></li>
+        <li><span>選択を外す</span><span><kbd>Esc</kbd></span></li>
+    </ul>
+    <div class="dz-help">作った画面は、このブラウザに自動で保存されます。</div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+}

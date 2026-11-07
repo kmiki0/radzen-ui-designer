@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RadzenUiDesigner.Tests/RadzenUiDesigner.Tests.csproj" />
+  <Project Path="RadzenUiDesigner/RadzenUiDesigner.csproj" />
+</Solution>

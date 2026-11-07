@@ -1,0 +1,283 @@
+@* 右のパネル。選んだ部品のパラメーター・スタイル・イベントを編集する。
+   部品を選んでいないときとプレビュー中は何も描かない（タブや節の開閉の状態は残す）。 *@
+@using Microsoft.AspNetCore.Components.Rendering
+
+@if (Hidden || Doc.Selected is not { } node || !ComponentCatalog.TryGet(node.Kind, out var def))
+{
+    return;
+}
+
+<aside class="dz-panel dz-inspector dz-chrome" data-dz-avoid="right">
+    <div class="dz-insp-head">
+        <span class="dz-insp-icon"><RadzenIcon Icon="@def.Icon" /></span>
+        <div class="dz-insp-name"><strong>@def.TagName</strong><small>@def.Label</small></div>
+        <button type="button" class="dz-x" title="選択を外す（Esc）" @onclick="() => Doc.Select(null)"><RadzenIcon Icon="close" /></button>
+    </div>
+    <div class="dz-crumbs">
+        <button type="button" @onclick="() => Doc.Select(null)">ページ</button>
+        @foreach (var a in Doc.Ancestors(node))
+        {
+            if (ComponentCatalog.TryGet(a.Kind, out var ad))
+            {
+                <span class="dz-crumb-sep">›</span>
+                <button type="button" @onclick="() => Doc.Select(a.Id)">@ad.ShortName</button>
+            }
+        }
+        <span class="dz-crumb-sep">›</span>
+        <strong>@def.ShortName</strong>
+    </div>
+    <div class="dz-ptabs" role="tablist">
+        <button type="button" class="@(tab == "props" ? "on" : "")" @onclick="@(() => tab = "props")">プロパティ</button>
+        <button type="button" class="@(tab == "styles" ? "on" : "")" @onclick="@(() => tab = "styles")">スタイル</button>
+        <button type="button" class="@(tab == "events" ? "on" : "")" @onclick="@(() => tab = "events")">イベント</button>
+    </div>
+
+    <div class="dz-pbody" @key="node.Id">
+        @if (tab == "props")
+        {
+            @if (Section(__builder, "basic", "主なプロパティ"))
+            {
+                foreach (var p in def.Props.Where(p => p.IsMain)) PropRow(__builder, node, p);
+            }
+            @if (def.FieldType is not null || def.HasItems)
+            {
+                if (Section(__builder, "data", "データ"))
+                {
+                    if (def.FieldType is not null)
+                    {
+                        RawRow(__builder, node, DesignNode.VarKey, "変数名", "@bind-Value", "例: userName");
+                    }
+                    if (def.HasItems)
+                    {
+                        <div class="dz-row dz-row-wide">
+                            <label><span>選択肢</span><code>1 行に 1 つ</code></label>
+                            <textarea class="dz-input" rows="4" value="@node.Props.GetValueOrDefault(DesignNode.ItemsKey)"
+                                      @oninput="e => Doc.SetRaw(node, DesignNode.ItemsKey, e.Value?.ToString())"></textarea>
+                        </div>
+                    }
+                }
+            }
+            var others = def.Props.Where(p => !p.IsMain && p.Name != "Style").ToList();
+            @if (others.Count > 0 && Section(__builder, "other", $"その他（{others.Count}）", defaultClosed: true))
+            {
+                foreach (var p in others) PropRow(__builder, node, p);
+            }
+        }
+        else if (tab == "styles")
+        {
+            @if (Section(__builder, "size", "サイズと余白"))
+            {
+                StyleRow(__builder, node, "width", "幅", "例: 100%");
+                StyleRow(__builder, node, "height", "高さ", "例: 200px");
+                StyleRow(__builder, node, "min-width", "最小の幅", "");
+                StyleRow(__builder, node, "max-width", "最大の幅", "");
+                StyleRow(__builder, node, "margin", "外側の余白", "例: 0 0 16px");
+                StyleRow(__builder, node, "padding", "内側の余白", "例: 8px 16px");
+            }
+            @if (Section(__builder, "text", "文字"))
+            {
+                StyleRow(__builder, node, "font-size", "大きさ", "例: 16px");
+                StyleSelectRow(__builder, node, "font-weight", "太さ", ["300", "400", "500", "600", "700"]);
+                ColorRow(__builder, node, "color", "色");
+                StyleSegRow(__builder, node, "text-align", "揃え", ["left", "center", "right"]);
+            }
+            @if (Section(__builder, "background", "背景"))
+            {
+                ColorRow(__builder, node, "background-color", "背景色");
+            }
+            @if (Section(__builder, "border", "枠線"))
+            {
+                StyleRow(__builder, node, "border", "枠線", "例: 1px solid #ccc");
+                StyleRow(__builder, node, "border-radius", "角の丸み", "例: 8px");
+            }
+            @if (Section(__builder, "css", "CSS（直接書く）", defaultClosed: true))
+            {
+                <div class="dz-row dz-row-wide">
+                    <label><span>Style</span><code>style 属性にそのまま入る</code></label>
+                    <textarea class="dz-input dz-mono" rows="4" value="@node.Props.GetValueOrDefault("Style")"
+                              @oninput="@(e => Doc.SetRaw(node, "Style", e.Value?.ToString()))"></textarea>
+                </div>
+            }
+        }
+        else
+        {
+            @if (Section(__builder, "events", "イベント"))
+            {
+                if (def.HasClick)
+                {
+                    RawRow(__builder, node, DesignNode.ClickKey, "クリック", "Click", "例: OnSaveClick");
+                    <div class="dz-help">メソッド名を書くと、@@code に空のメソッドを作ります。</div>
+                }
+                else
+                {
+                    <div class="dz-help">
+                        この部品で指定できるイベントはありません。入力部品の値は、プロパティの「データ」で変数名を指定します（@@bind-Value）。
+                    </div>
+                }
+            }
+        }
+    </div>
+</aside>
+
+@code {
+    [Parameter, EditorRequired] public DesignDocument Doc { get; set; } = default!;
+
+    /// <summary>プレビュー中は何も描かない。</summary>
+    [Parameter] public bool Hidden { get; set; }
+
+    string tab = "props";                         // props / styles / events
+    readonly HashSet<string> toggled = new();     // 既定から開閉を切り替えた節
+
+    void Toggle(string key)
+    {
+        if (!toggled.Remove(key)) toggled.Add(key);
+    }
+
+    /// <summary>折りたためる節の見出し。開いていれば true を返す。</summary>
+    bool Section(RenderTreeBuilder __builder, string key, string title, bool defaultClosed = false)
+    {
+        var open = defaultClosed ? toggled.Contains("sec:" + key) : !toggled.Contains("sec:" + key);
+        <button type="button" class="dz-psec" @onclick="@(() => Toggle("sec:" + key))">
+            <span class="dz-tri @(open ? "open" : "")"></span>@title
+        </button>
+        return open;
+    }
+
+    static string DefaultText(PropDef p) => p.Default is null or "" ? "" : p.Default;
+
+    /// <summary>パラメーター 1 つ。bool はオフ・オン、3 つまでの列挙型はボタン、それより多ければ一覧、ほかは入力欄。</summary>
+    void PropRow(RenderTreeBuilder __builder, DesignNode node, PropDef p)
+    {
+        var stored = node.Props.GetValueOrDefault(p.Name);
+        var effective = stored ?? p.Default;
+        <div class="dz-row @(stored is not null ? "set" : "")">
+            <label title="@($"{p.Label}（{p.Name}）")"><span>@p.Label</span><code>@p.Name</code></label>
+            <div class="dz-ctl">
+                @if (p.IsBool)
+                {
+                    <div class="dz-segs">
+                        <button type="button" class="@(effective != "true" ? "on" : "")" @onclick="@(() => Doc.SetProp(node, p, "false"))">オフ</button>
+                        <button type="button" class="@(effective == "true" ? "on" : "")" @onclick="@(() => Doc.SetProp(node, p, "true"))">オン</button>
+                    </div>
+                }
+                else if (p.EnumNames is { } names && names.Length <= 3)
+                {
+                    <div class="dz-segs">
+                        @foreach (var name in names)
+                        {
+                            <button type="button" class="@(effective == name ? "on" : "")" @onclick="() => Doc.SetProp(node, p, name)">@name</button>
+                        }
+                    </div>
+                }
+                else if (p.EnumNames is { } many)
+                {
+                    <select class="dz-input" value="@(stored ?? "")" @onchange="e => Doc.SetProp(node, p, e.Value?.ToString())">
+                        <option value="">@(p.Default is null ? "（既定）" : $"{p.Default}（既定）")</option>
+                        @foreach (var name in many.Where(n => n != p.Default))
+                        {
+                            <option value="@name">@name</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input class="dz-input" type="@(p.IsNumber ? "number" : "text")" step="any" value="@stored" placeholder="@DefaultText(p)"
+                           @oninput="e => Doc.SetProp(node, p, e.Value?.ToString())" />
+                }
+                @if (stored is not null)
+                {
+                    <button type="button" class="dz-reset" title="既定に戻す" @onclick="() => Doc.SetProp(node, p, null)">×</button>
+                }
+            </div>
+        </div>
+    }
+
+    /// <summary>
+    /// デザイナーが使う名前（変数名・Click のメソッド名）の入力欄。
+    /// C# の名前として使えないときは、コードでは別の名前になることを知らせる。
+    /// </summary>
+    void RawRow(RenderTreeBuilder __builder, DesignNode node, string key, string label, string codeName, string placeholder)
+    {
+        var stored = node.Props.GetValueOrDefault(key);
+        var invalid = stored is not null && !RazorWriter.IsValidName(stored.Trim());
+        <div class="dz-row @(stored is not null ? "set" : "")">
+            <label><span>@label</span><code>@codeName</code></label>
+            <div class="dz-ctl">
+                <input class="dz-input dz-mono @(invalid ? "invalid" : "")" value="@stored" placeholder="@placeholder" @oninput="e => Doc.SetRaw(node, key, e.Value?.ToString())" />
+            </div>
+        </div>
+        @if (invalid)
+        {
+            <div class="dz-help dz-warn">
+                C# の名前として使えません（英字か _ で始まる英数字。class などの予約語は不可）。@(key == DesignNode.ClickKey ? "コードには出しません。" : "コードでは別の名前になります。")
+            </div>
+        }
+    }
+
+    static string? StyleValue(DesignNode node, string css) => StyleMap.Parse(node.Props.GetValueOrDefault("Style")).Get(css);
+
+    void StyleRow(RenderTreeBuilder __builder, DesignNode node, string css, string label, string placeholder)
+    {
+        var value = StyleValue(node, css);
+        <div class="dz-row @(value is not null ? "set" : "")">
+            <label title="@css"><span>@label</span><code>@css</code></label>
+            <div class="dz-ctl">
+                <input class="dz-input" value="@value" placeholder="@placeholder" @oninput="e => Doc.SetStyle(node, css, e.Value?.ToString())" />
+                @if (value is not null)
+                {
+                    <button type="button" class="dz-reset" title="消す" @onclick="() => Doc.SetStyle(node, css, null)">×</button>
+                }
+            </div>
+        </div>
+    }
+
+    void StyleSelectRow(RenderTreeBuilder __builder, DesignNode node, string css, string label, string[] options)
+    {
+        var value = StyleValue(node, css);
+        <div class="dz-row @(value is not null ? "set" : "")">
+            <label title="@css"><span>@label</span><code>@css</code></label>
+            <div class="dz-ctl">
+                <select class="dz-input" value="@(value ?? "")" @onchange="e => Doc.SetStyle(node, css, e.Value?.ToString())">
+                    <option value="">（指定なし）</option>
+                    @foreach (var o in options)
+                    {
+                        <option value="@o">@o</option>
+                    }
+                </select>
+            </div>
+        </div>
+    }
+
+    void StyleSegRow(RenderTreeBuilder __builder, DesignNode node, string css, string label, string[] options)
+    {
+        var value = StyleValue(node, css);
+        <div class="dz-row @(value is not null ? "set" : "")">
+            <label title="@css"><span>@label</span><code>@css</code></label>
+            <div class="dz-ctl">
+                <div class="dz-segs">
+                    @foreach (var o in options)
+                    {
+                        <button type="button" class="@(value == o ? "on" : "")" @onclick="() => Doc.SetStyle(node, css, value == o ? null : o)">@o</button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    void ColorRow(RenderTreeBuilder __builder, DesignNode node, string css, string label)
+    {
+        var value = StyleValue(node, css);
+        var hex = value is { Length: 7 } && value[0] == '#' ? value : "#000000";
+        <div class="dz-row @(value is not null ? "set" : "")">
+            <label title="@css"><span>@label</span><code>@css</code></label>
+            <div class="dz-ctl">
+                <input class="dz-color" type="color" value="@hex" @oninput="e => Doc.SetStyle(node, css, e.Value?.ToString())" />
+                <input class="dz-input" value="@value" placeholder="例: #333 / red" @oninput="e => Doc.SetStyle(node, css, e.Value?.ToString())" />
+                @if (value is not null)
+                {
+                    <button type="button" class="dz-reset" title="消す" @onclick="() => Doc.SetStyle(node, css, null)">×</button>
+                }
+            </div>
+        </div>
+    }
+}

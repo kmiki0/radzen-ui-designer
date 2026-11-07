@@ -1,0 +1,94 @@
+@* 下のボトムバー。生成したコードを、種類ごとに色を分けて出す。
+   見出しを押すと開閉し、開いているときは上の縁をドラッグで高さを変える（ドラッグは designer.js が data-dz-split を見て行う）。
+   選んだ部品の行に色を付け、行をクリックするとその行の部品を選ぶ（クリックは designer.js が data-dz-node を見て行う）。 *@
+
+@if (Hidden)
+{
+    return;
+}
+
+<section class="dz-bottom dz-chrome @(Open ? "open" : "")" aria-label="コード">
+    @if (Open)
+    {
+        <div class="dz-split" data-dz-split title="ドラッグで高さを変える"></div>
+    }
+    <div class="dz-bottom-bar" title="@(Open ? "コードを畳む" : "コードを開く")" @onclick="() => OpenChanged.InvokeAsync(!Open)">
+        <span class="dz-bottom-tab"><RadzenIcon Icon="code" />コード</span>
+        <span class="dz-bottom-file">ページ.razor</span>
+        <small>@Code.Lines.Count 行</small>
+        <div class="dz-fill"></div>
+        <button type="button" class="dz-tbtn" disabled="@(Doc.Root.Children.Count == 0)" @onclick="Copy" @onclick:stopPropagation="true">
+            <RadzenIcon Icon="@(Copied ? "check" : "content_copy")" />@(Copied ? "コピーしました" : "コピー")
+        </button>
+        <span class="dz-bottom-chev"><RadzenIcon Icon="@(Open ? "keyboard_arrow_down" : "keyboard_arrow_up")" /></span>
+    </div>
+    @if (Open)
+    {
+        <div class="dz-source-code">
+            @{ var sel = Doc.SelectedId is { } id && Code.Ranges.TryGetValue(id, out var r) ? r : (LineRange?)null; }
+            @for (var li = 0; li < Code.Lines.Count; li++)
+            {
+                var line = Code.Lines[li];
+                <div class="@LineClass(li, sel)" data-dz-node="@Code.Owners[li]">@foreach (var t in line)
+                    {
+                        if (t.Kind == TokenKind.Plain)
+                        {
+                            @t.Text
+                        }
+                        else
+                        {
+                            <span class="@TokenClass(t.Kind)">@t.Text</span>
+                        }
+                    }</div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public DesignDocument Doc { get; set; } = default!;
+
+    /// <summary>プレビュー中は何も描かない。</summary>
+    [Parameter] public bool Hidden { get; set; }
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>文字をクリップボードに写す。写せたら true。</summary>
+    [Parameter, EditorRequired] public Func<string, Task<bool>> CopyText { get; set; } = default!;
+
+    GeneratedCode Code => Doc.Code;
+
+    // 写した文字。コードが変わったら「コピーしました」を消す
+    string? copiedText;
+    bool Copied => copiedText is not null && copiedText == Code.Text;
+
+    async Task Copy()
+    {
+        var text = Code.Text;
+        copiedText = await CopyText(text) ? text : null;
+    }
+
+    static string LineClass(int line, LineRange? sel)
+    {
+        if (sel is not { } r || !r.Contains(line)) return "dz-ln";
+        return "dz-ln sel" + (line == r.Start ? " sel-first" : "") + (line == r.End ? " sel-last" : "");
+    }
+
+    static string TokenClass(TokenKind k) => k switch
+    {
+        TokenKind.Punct => "hl-punct",
+        TokenKind.Tag => "hl-tag",
+        TokenKind.Param => "hl-param",
+        TokenKind.Attr => "hl-attr",
+        TokenKind.Razor => "hl-razor",
+        TokenKind.Str => "hl-str",
+        TokenKind.Keyword => "hl-kw",
+        TokenKind.Type => "hl-type",
+        TokenKind.Member => "hl-member",
+        TokenKind.Var => "hl-var",
+        TokenKind.Method => "hl-method",
+        TokenKind.Number => "hl-num",
+        _ => "",
+    };
+}
