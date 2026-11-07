@@ -1,4 +1,4 @@
-# main に push すると、テストとビルドをしてから Cloudflare Workers に公開する。
+# main に push すると、テストとビルドをしてから Cloudflare Pages（radzen-ui-designer.pages.dev）に公開する。
 # プルリクエストではテストとビルドだけを行い、公開はしない。
 # リポジトリの Secrets に CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID が必要。
 name: Cloudflare に公開
@@ -32,10 +32,13 @@ jobs:
       - name: ビルド
         run: dotnet publish RadzenUiDesigner -c Release -o publish -p:CompressionEnabled=false
 
-      - name: Cloudflare に公開
+      # 公開先と公開するフォルダーは wrangler.jsonc の name と pages_build_output_dir で決まる。
+      # wrangler の版は固定しておく。版が変わると、Pages への公開が Workers 側に回される場合がある。
+      - name: Cloudflare Pages に公開
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.158.0"
+          command: pages deploy --branch=main

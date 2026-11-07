@@ -47,7 +47,7 @@ dotnet test
 
 ## Cloudflare に公開する
 
-公開先は <https://radzen-ui-designer.kmiki-info.workers.dev>。Cloudflare Workers の静的アセットとして配信する。設定は `wrangler.jsonc` にある。
+公開先は <https://radzen-ui-designer.pages.dev>。Cloudflare Pages で配信する。設定は `wrangler.jsonc` にある。
 
 `main` に push すると、GitHub Actions（`.github/workflows/deploy.yml`）がテストとビルドをしてから公開する。リポジトリの Secrets に `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` が必要。
 
@@ -55,10 +55,12 @@ dotnet test
 
 ```
 dotnet publish RadzenUiDesigner -c Release -o publish -p:CompressionEnabled=false
-npx wrangler deploy
+npx wrangler pages deploy --branch=main
 ```
 
 `-p:CompressionEnabled=false` を付けると、`.br` と `.gz` のファイルを作らない。Cloudflare は配信するときに自分で圧縮するので、これらは使わない。初めて公開するときは、先に `npx wrangler login` でログインしておく。
+
+Pages のプロジェクトは、`npx wrangler pages project create radzen-ui-designer --production-branch main --force` で作った。wrangler 4.151 以降は `--force` を付けないと Workers 側に作られ、URL が `workers.dev` になる。
 
 ## 構成
 
