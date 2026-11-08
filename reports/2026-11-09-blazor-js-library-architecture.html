@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blazor から地図ライブラリを使う構成</title>
+<meta name="date" content="2026-11-09">
+<style>
+/* ---- tokens ---------------------------------------------------------- */
+:root {
+  --bg:        #faf9f7;
+  --bg-sunk:   #f1efec;
+  --bg-raised: #ffffff;
+  --line:      #e2ded8;
+  --line-soft: #ece9e4;
+  --ink:       #23211e;
+  --ink-mid:   #5c574f;
+  --ink-dim:   #8a8378;
+  --accent:    #1f6f6b;
+  --accent-bg: #e4f0ef;
+  --warn:      #9a5b12;
+  --warn-bg:   #f8eedd;
+  --radius: 10px;
+  --page-max: 1600px;  /* ページ幅の上限。これ以下はウィンドウ幅に追従する */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #16181a;
+    --bg-sunk:   #101214;
+    --bg-raised: #1e2124;
+    --line:      #32373c;
+    --line-soft: #262b2f;
+    --ink:       #e6e3de;
+    --ink-mid:   #a7a29a;
+    --ink-dim:   #767068;
+    --accent:    #63c8bf;
+    --accent-bg: #16302f;
+    --warn:      #e0a860;
+    --warn-bg:   #2e2517;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:        #16181a;
+  --bg-sunk:   #101214;
+  --bg-raised: #1e2124;
+  --line:      #32373c;
+  --line-soft: #262b2f;
+  --ink:       #e6e3de;
+  --ink-mid:   #a7a29a;
+  --ink-dim:   #767068;
+  --accent:    #63c8bf;
+  --accent-bg: #16302f;
+  --warn:      #e0a860;
+  --warn-bg:   #2e2517;
+}
+
+/* ---- reset / base ---------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI",
+               "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
+  font-size: 16px;
+  line-height: 1.9;
+  font-feature-settings: "palt" 1;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-break: strict;
+}
+
+/* ---- layout ---------------------------------------------------------- */
+/* ウィンドウ幅を使う。上限だけ決めて、あとは流動させる。
+   行長で全体を縛ると、広いモニタでも中央に細い柱が立つだけになる。 */
+.page { max-width: var(--page-max); margin: 0 auto; padding: 3.5rem clamp(1.1rem, 3vw, 3rem) 6rem; }
+@media (max-width: 640px) { .page { padding: 2rem 1.1rem 4rem; } }
+
+header.doc {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1.6rem;
+  margin-bottom: 2.6rem;
+}
+header.doc .kicker {
+  font-size: .75rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0 0 .7rem;
+}
+header.doc h1 {
+  font-size: clamp(1.65rem, 1.2rem + 2vw, 2.35rem);
+  line-height: 1.35;
+  letter-spacing: -.01em;
+  margin: 0 0 .8rem;
+  font-weight: 700;
+}
+header.doc .lede { color: var(--ink-mid); margin: 0 0 1.1rem; font-size: 1.02rem; }
+header.doc .meta {
+  display: flex; flex-wrap: wrap; gap: .5rem 1.1rem;
+  font-size: .8rem; color: var(--ink-dim); margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- typography ------------------------------------------------------ */
+h2 {
+  font-size: 1.32rem;
+  line-height: 1.5;
+  margin: 3.2rem 0 1rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line-soft);
+  font-weight: 700;
+  letter-spacing: -.005em;
+}
+h2:first-of-type { margin-top: 0; border-top: 0; padding-top: 0; }
+h3 { font-size: 1.06rem; margin: 2.1rem 0 .6rem; font-weight: 700; }
+h4 { font-size: .95rem; margin: 1.5rem 0 .4rem; font-weight: 700; color: var(--ink-mid); }
+p  { margin: 0 0 1.15rem; }
+strong { font-weight: 700; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: .18em; }
+a:hover { text-decoration-thickness: 2px; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 2.8rem 0; }
+small { font-size: .82rem; color: var(--ink-dim); }
+
+ul, ol { margin: 0 0 1.15rem; padding-left: 1.35rem; }
+li { margin: .3rem 0; }
+li > ul, li > ol { margin-top: .3rem; margin-bottom: .3rem; }
+
+blockquote {
+  margin: 1.4rem 0;
+  padding: .2rem 0 .2rem 1.1rem;
+  border-left: 3px solid var(--line);
+  color: var(--ink-mid);
+}
+
+/* ---- code ------------------------------------------------------------ */
+code, kbd, pre {
+  font-family: "Cascadia Code", "JetBrains Mono", ui-monospace, SFMono-Regular,
+               "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-feature-settings: normal;
+}
+:not(pre) > code {
+  background: var(--bg-sunk);
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  padding: .1em .38em;
+  font-size: .875em;
+  overflow-wrap: break-word;
+}
+pre {
+  background: var(--bg-sunk);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  font-size: .855rem;
+  line-height: 1.7;
+  margin: 0 0 1.35rem;
+  -webkit-overflow-scrolling: touch;
+}
+pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+
+/* ---- figures --------------------------------------------------------- */
+/* 参照画像は reports/assets/<slug>/ に落として相対パスで引く。file:// で開く
+   文書なので、外部ホストを直接指すと相手の都合とネットの有無で中身が消える。 */
+figure {
+  margin: 0 0 1.6rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .75rem .75rem .2rem;
+}
+figure img, figure svg { display: block; width: 100%; height: auto; border-radius: 6px; background: var(--bg-sunk); }
+figcaption {
+  font-size: .82rem; line-height: 1.7; color: var(--ink-dim);
+  padding: .55rem .25rem .6rem;
+}
+figcaption a { color: var(--ink-mid); }
+/* 並べて比べるための格子。figure をそのまま入れる。 */
+.figures { display: grid; gap: .85rem; margin: 0 0 1.6rem; }
+.figures > figure { margin: 0; }
+@media (min-width: 720px) {
+  .figures.two   { grid-template-columns: repeat(2, 1fr); }
+  .figures.three { grid-template-columns: repeat(3, 1fr); }
+  .figures.four  { grid-template-columns: repeat(4, 1fr); }
+}
+/* 暗い配色では、白背景の図版だけが板のように光る。わずかに沈めて馴染ませる
+   ——反転はしない。図の中の色が意味を持っていることがあるので。 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) figure img { filter: brightness(.88); }
+}
+:root[data-theme="dark"] figure img { filter: brightness(.88); }
+
+/* ---- tables ---------------------------------------------------------- */
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  -webkit-overflow-scrolling: touch;
+}
+table { border-collapse: collapse; width: 100%; font-size: .89rem; line-height: 1.65; }
+/* Latin の長い語を折らない。溢れたぶんは .table-wrap 側が横スクロールする。
+   日本語は禁則で普通に折り返るので、これで両方まともになる。 */
+th, td {
+  text-align: left; padding: .62rem .85rem;
+  border-bottom: 1px solid var(--line-soft); vertical-align: top;
+  overflow-wrap: normal;
+}
+tbody td:first-child { min-width: 11rem; }
+thead th {
+  background: var(--bg-sunk);
+  font-weight: 700;
+  font-size: .78rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ink-mid);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---- callouts -------------------------------------------------------- */
+.note, .caution, .verdict {
+  border-radius: var(--radius);
+  padding: .95rem 1.15rem;
+  margin: 0 0 1.5rem;
+  font-size: .94rem;
+}
+.note    { background: var(--accent-bg); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+.caution { background: var(--warn-bg);   border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+.verdict { background: var(--bg-raised); border: 1px solid var(--line); border-left: 4px solid var(--accent); }
+.note > :last-child, .caution > :last-child, .verdict > :last-child { margin-bottom: 0; }
+.note .label, .caution .label, .verdict .label {
+  display: block; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+  font-weight: 700; margin-bottom: .35rem;
+}
+.note .label { color: var(--accent); }
+.caution .label { color: var(--warn); }
+.verdict .label { color: var(--accent); }
+
+/* ---- cards ----------------------------------------------------------- */
+.cards { display: grid; gap: .85rem; margin: 0 0 1.6rem; }
+@media (min-width: 720px) { .cards.two { grid-template-columns: 1fr 1fr; } }
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+}
+.card > :last-child { margin-bottom: 0; }
+.card h3 { margin-top: 0; font-size: 1rem; }
+.tag {
+  display: inline-block; font-size: .7rem; font-weight: 700; letter-spacing: .06em;
+  padding: .16em .55em; border-radius: 4px;
+  background: var(--bg-sunk); color: var(--ink-mid); border: 1px solid var(--line-soft);
+  vertical-align: .12em; white-space: nowrap;
+}
+.tag.pick { background: var(--accent-bg); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* ---- sources --------------------------------------------------------- */
+.sources { font-size: .86rem; color: var(--ink-mid); }
+.sources ol { padding-left: 1.5rem; }
+.sources li { margin: .38rem 0; overflow-wrap: anywhere; }
+
+footer.doc {
+  margin-top: 4rem; padding-top: 1.3rem;
+  border-top: 1px solid var(--line);
+  font-size: .78rem; color: var(--ink-dim);
+  display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between;
+}
+
+/* ---- theme toggle ---------------------------------------------------- */
+#theme {
+  position: fixed; top: .9rem; right: .9rem; z-index: 10;
+  background: var(--bg-raised); color: var(--ink-mid);
+  border: 1px solid var(--line); border-radius: 999px;
+  font: inherit; font-size: .75rem; line-height: 1;
+  padding: .5rem .8rem; cursor: pointer;
+}
+#theme:hover { color: var(--ink); border-color: var(--ink-dim); }
+
+@media print {
+  #theme { display: none; }
+  body { background: #fff; color: #000; font-size: 10.5pt; }
+  .page { max-width: none; padding: 0; }
+  a { color: #000; }
+  h2 { break-after: avoid; }
+  .table-wrap, pre, .card, figure { break-inside: avoid; }
+  figure img { filter: none; }
+}
+</style>
+</head>
+<body>
+<button id="theme" type="button" aria-label="配色を切り替える">◐ 表示</button>
+
+<div class="page">
+
+<header class="doc">
+  <p class="kicker">設計検討</p>
+  <h1>Blazor から地図ライブラリを使う構成</h1>
+  <p class="lede">地図ライブラリは自作の小さな ES モジュールで包み、C# のラッパーコンポーネント1つから操作する構成を勧めます。構成図、呼び出しの流れ、Leaflet での実装例、地図に特有の注意点をまとめました。</p>
+  <p class="meta"><span>2026-11-09</span><span>radzen-ui-designer</span></p>
+</header>
+
+<main>
+<style>
+  .arch text { font-family: inherit; }
+  .arch .region { fill: var(--bg); }
+  .arch .box { fill: var(--bg-raised); stroke: var(--line); stroke-width: 1.2; }
+  .arch .box.mine { stroke: var(--accent); stroke-width: 1.8; }
+  .arch .t { fill: var(--ink); font-size: 15px; font-weight: 700; }
+  .arch .s, .arch .lbl { fill: var(--ink-mid); font-family: "Cascadia Code", Consolas, ui-monospace, monospace; }
+  .arch .s { font-size: 12.5px; }
+  .arch .lbl { font-size: 12px; }
+  .arch .lbl.b { fill: var(--accent); }
+  .arch .lbl.d { fill: var(--ink-dim); }
+  .arch .n { fill: var(--ink-mid); font-size: 13px; }
+  .arch .lane { fill: var(--ink-dim); font-size: 12px; font-weight: 700; letter-spacing: .12em; }
+  .arch .ph { fill: var(--ink); font-size: 14px; font-weight: 700; }
+  .arch .phs { fill: var(--ink-dim); font-size: 11px; font-family: "Cascadia Code", Consolas, ui-monospace, monospace; }
+  .arch .call { stroke: var(--ink-mid); stroke-width: 1.5; fill: none; }
+  .arch .back { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+  .arch .ret { stroke: var(--ink-dim); stroke-width: 1.3; stroke-dasharray: 5 4; fill: none; }
+  .arch .life { stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 3 4; }
+  .arch .edge { stroke: var(--warn); stroke-width: 1.4; stroke-dasharray: 7 5; }
+  .arch .edge-t { fill: var(--warn); font-size: 13px; font-weight: 700; }
+  .arch .ah { fill: var(--ink-mid); }
+  .arch .ah-b { fill: var(--accent); }
+  .arch .ah-r { fill: var(--ink-dim); }
+  .arch .notebox { fill: var(--bg-sunk); stroke: var(--line); }
+</style>
+
+<h2>結論</h2>
+
+<div class="verdict"><span class="label">結論</span>
+<p>Blazor と地図ライブラリの間には、次の3層を置きます。</p>
+<ol>
+  <li><strong>ラッパーコンポーネント（C#）</strong>：ページから見えるのはこれだけ。表示位置・ピン・クリックを、パラメーターとイベントで扱う</li>
+  <li><strong>接着用の ES モジュール（自作の JS）</strong>：ライブラリの API を <code>create</code>・<code>setView</code>・<code>setPins</code>・<code>dispose</code> の4つの関数に包む</li>
+  <li><strong>ライブラリ本体</strong>：Blazor が中身を描かない空の要素を1つ渡し、その中だけを任せる</li>
+</ol>
+<p>地図で特に決めておくのは、<strong>表示位置をどちらが持つか</strong>です。ドラッグ中の位置は JS 側だけが持ち、C# には止まったとき（<code>moveend</code>）に1回だけ知らせます。C# から地図を動かすのは、パラメーターが地図の表示と違うときだけにします。こうすると、C# と JS の間で位置の更新が往復し続けることがありません。</p>
+<p>ライブラリは、ピンや範囲を描く程度なら Leaflet 1.9.4、件数が多い・見た目を作り込むなら MapLibre GL JS を勧めます。</p>
+</div>
+
+<h2>構成図</h2>
+
+<figure>
+<svg class="arch" viewBox="0 0 960 574" role="img" aria-label="ページ、ラッパーコンポーネント MapPanel.razor、接着用モジュール MapPanel.razor.js、Leaflet、host 要素の中の DOM を上から順に並べた構成図。ラッパーと接着用モジュールの間に JS interop の境界がある">
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="a1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-b" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+
+  <rect class="region" x="16" y="10" width="568" height="278" rx="10"/>
+  <rect class="region" x="16" y="312" width="568" height="248" rx="10"/>
+  <text class="lane" transform="translate(40,149) rotate(-90)" text-anchor="middle">.NET（C#）</text>
+  <text class="lane" transform="translate(40,436) rotate(-90)" text-anchor="middle">JavaScript</text>
+
+  <!-- 1. ページ -->
+  <rect class="box" x="60" y="24" width="504" height="64" rx="8"/>
+  <text class="t" x="78" y="50">使う側のページ（.razor）</text>
+  <text class="s" x="78" y="74">&lt;MapPanel @bind-View="view" Pins="shops" OnPinClick="Show" /&gt;</text>
+
+  <line class="call" x1="150" y1="88" x2="150" y2="126" marker-end="url(#a1)"/>
+  <text class="lbl" x="162" y="112">View / Pins</text>
+  <line class="back" x1="380" y1="128" x2="380" y2="90" marker-end="url(#a1b)"/>
+  <text class="lbl b" x="392" y="112">ViewChanged / OnPinClick</text>
+
+  <!-- 2. ラッパー -->
+  <rect class="box mine" x="60" y="128" width="504" height="148" rx="8"/>
+  <text class="t" x="78" y="154">ラッパーコンポーネント　MapPanel.razor</text>
+  <text class="s" x="78" y="182">module, map : IJSObjectReference</text>
+  <text class="s" x="78" y="204">self : DotNetObjectReference&lt;MapPanel&gt;</text>
+  <text class="s" x="78" y="226">shown : MapView   ← 地図にいま出ている位置</text>
+  <text class="s" x="78" y="248">&lt;div @ref="host"&gt;&lt;/div&gt;   ← 中身は空のまま</text>
+
+  <!-- 境界 -->
+  <line class="edge" x1="16" y1="300" x2="944" y2="300"/>
+
+  <line class="call" x1="150" y1="276" x2="150" y2="328" marker-end="url(#a1)"/>
+  <text class="lbl" x="162" y="292">create / setView</text>
+  <text class="lbl" x="162" y="322">setPins / dispose</text>
+  <line class="back" x1="380" y1="330" x2="380" y2="278" marker-end="url(#a1b)"/>
+  <text class="lbl b" x="392" y="292">invokeMethodAsync</text>
+  <text class="lbl b" x="392" y="322">("OnViewChanged", …)</text>
+
+  <!-- 3. 接着用モジュール -->
+  <rect class="box mine" x="60" y="330" width="504" height="92" rx="8"/>
+  <text class="t" x="78" y="356">接着用モジュール　MapPanel.razor.js（自作）</text>
+  <text class="s" x="78" y="382">export function create(host, view, dotnet)</text>
+  <text class="s" x="78" y="404">  → { setView, setPins, dispose } を返す</text>
+
+  <line class="call" x1="110" y1="422" x2="110" y2="470" marker-end="url(#a1)"/>
+  <text class="lbl" x="122" y="442">L.map / setView</text>
+  <text class="lbl" x="122" y="462">addTo / remove</text>
+  <line class="back" x1="250" y1="472" x2="250" y2="424" marker-end="url(#a1b)"/>
+  <text class="lbl b" x="262" y="452">moveend / click</text>
+
+  <!-- 4. ライブラリ / 5. DOM -->
+  <rect class="box" x="60" y="472" width="226" height="72" rx="8"/>
+  <text class="t" x="78" y="500">ライブラリ本体</text>
+  <text class="s" x="78" y="526">leaflet.bundle.js</text>
+  <rect class="box" x="338" y="472" width="226" height="72" rx="8"/>
+  <text class="t" x="356" y="500">host の中の DOM</text>
+  <text class="n" x="356" y="526">タイル画像・マーカー</text>
+  <line class="call" x1="286" y1="512" x2="336" y2="512" marker-end="url(#a1)"/>
+  <text class="n" x="311" y="502" text-anchor="middle">描画</text>
+
+  <!-- 右側の説明 -->
+  <text class="n" x="612" y="48">ページは JS を知らない。</text>
+  <text class="n" x="612" y="68">C# の値とイベントだけを扱う</text>
+
+  <text class="n" x="612" y="160">JS 側の参照と、地図の表示位置を持つ。</text>
+  <text class="n" x="612" y="180">作成 → 更新 → 片付けの順番を守る。</text>
+  <text class="n" x="612" y="208">JS とやり取りするのは</text>
+  <text class="n" x="612" y="228">このコンポーネントだけにする</text>
+
+  <text class="edge-t" x="612" y="292">JS interop の境界</text>
+  <text class="n" x="612" y="324">越えるのは moveend とクリックのときだけ。</text>
+  <text class="n" x="612" y="344">ドラッグ中の move は C# に送らない</text>
+
+  <text class="n" x="612" y="380">ライブラリの API を、C# から</text>
+  <text class="n" x="612" y="400">呼びやすい少数の関数に包む</text>
+
+  <text class="n" x="612" y="500">Blazor の差分描画は host の中を見ない。</text>
+  <text class="n" x="612" y="520">中身はライブラリが自由に書き換えてよい</text>
+</svg>
+<figcaption>Leaflet を例にした構成図。色の付いた枠は自分で書くファイル。灰色の矢印は C# から JS への呼び出し、色の付いた矢印は JS から C# への通知を表す。</figcaption>
+</figure>
+
+<h3>各層の役割</h3>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>層</th><th>ファイルと置き場所</th><th>受け持つこと</th><th>持たせないこと</th></tr></thead>
+    <tbody>
+      <tr><td>ラッパーコンポーネント</td><td><code>Components/MapPanel.razor</code></td><td>パラメーターの受け取り、JS 参照の保持、作成・更新・片付けの順番、地図の表示位置（<code>shown</code>）の記録、JS からの通知を <code>EventCallback</code> に変換</td><td>ライブラリ固有の API 呼び出し</td></tr>
+      <tr><td>接着用モジュール</td><td><code>Components/MapPanel.razor.js</code>（.razor の隣に置く collocated JS）</td><td>地図の生成と破棄、ピンの差分の反映、<code>moveend</code> とクリックを <code>invokeMethodAsync</code> で C# に通知、大きさの変化への追従</td><td>ピンの一覧など画面の状態（正しい値は C# 側が持つ）</td></tr>
+      <tr><td>ライブラリ本体</td><td><code>wwwroot/lib/leaflet/</code>（JS・CSS・画像）</td><td>タイルとマーカーの描画、ドラッグやズームの操作</td><td>Blazor が描いた要素への書き込み</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>層を分ける理由は3つあります。1つ目は、ライブラリを差し替えても直すのが接着用モジュールだけで済むことです。Leaflet は 2.0 で書き方が変わる予定なので、この点が実際に役立ちます。2つ目は、境界を越える呼び出しが4種類に限られ、回数を数えやすいことです。3つ目は、片付けの漏れを1か所で確かめられることです。</p>
+
+<h2>呼び出しの流れ</h2>
+
+<figure>
+<svg class="arch" viewBox="0 0 960 556" role="img" aria-label="作る、更新、地図を動かす、片付けの4段階で、MapPanel.razor、MapPanel.razor.js、Leaflet の間を行き来する呼び出しを示したシーケンス図">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="a2b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-b" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="a2r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-r" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+
+  <rect class="region" x="16" y="76" width="928" height="150" rx="8"/>
+  <rect class="region" x="16" y="316" width="928" height="104" rx="8"/>
+
+  <text class="ph" x="28" y="100">作る</text>
+  <text class="phs" x="28" y="120">OnAfterRenderAsync</text>
+  <text class="phs" x="28" y="136">(firstRender)</text>
+  <text class="ph" x="28" y="260">更新</text>
+  <text class="phs" x="28" y="280">OnParametersSetAsync</text>
+  <text class="ph" x="28" y="340">地図を動かす</text>
+  <text class="n" x="28" y="362" style="font-size:11px">利用者のドラッグ</text>
+  <text class="ph" x="28" y="454">片付け</text>
+  <text class="phs" x="28" y="474">DisposeAsync</text>
+
+  <rect class="box mine" x="200" y="16" width="200" height="44" rx="8"/>
+  <text class="t" x="300" y="43" text-anchor="middle">MapPanel.razor</text>
+  <rect class="box mine" x="490" y="16" width="200" height="44" rx="8"/>
+  <text class="t" x="590" y="43" text-anchor="middle">MapPanel.razor.js</text>
+  <rect class="box" x="760" y="16" width="160" height="44" rx="8"/>
+  <text class="t" x="840" y="43" text-anchor="middle">Leaflet</text>
+  <line class="life" x1="300" y1="60" x2="300" y2="546"/>
+  <line class="life" x1="590" y1="60" x2="590" y2="546"/>
+  <line class="life" x1="840" y1="60" x2="840" y2="546"/>
+
+  <!-- 作る -->
+  <line class="call" x1="300" y1="104" x2="588" y2="104" marker-end="url(#a2)"/>
+  <text class="lbl" x="445" y="97" text-anchor="middle">import("…/MapPanel.razor.js")</text>
+  <line class="call" x1="300" y1="138" x2="588" y2="138" marker-end="url(#a2)"/>
+  <text class="lbl" x="445" y="131" text-anchor="middle">create(host, view, self)</text>
+  <line class="call" x1="590" y1="172" x2="838" y2="172" marker-end="url(#a2)"/>
+  <text class="lbl" x="715" y="165" text-anchor="middle">L.map(host) / tileLayer</text>
+  <line class="ret" x1="590" y1="206" x2="302" y2="206" marker-end="url(#a2r)"/>
+  <text class="lbl" x="445" y="199" text-anchor="middle">{ setView, setPins, dispose }</text>
+
+  <!-- 更新 -->
+  <line class="call" x1="300" y1="264" x2="588" y2="264" marker-end="url(#a2)"/>
+  <text class="lbl" x="445" y="257" text-anchor="middle">setPins(pins)</text>
+  <line class="call" x1="590" y1="294" x2="838" y2="294" marker-end="url(#a2)"/>
+  <text class="lbl" x="715" y="287" text-anchor="middle">addTo / remove（差分だけ）</text>
+
+  <!-- 地図を動かす -->
+  <line class="ret" x1="840" y1="344" x2="592" y2="344" marker-end="url(#a2r)"/>
+  <text class="lbl d" x="715" y="337" text-anchor="middle">move（何度も）… C# へは送らない</text>
+  <line class="back" x1="840" y1="374" x2="592" y2="374" marker-end="url(#a2b)"/>
+  <text class="lbl b" x="715" y="367" text-anchor="middle">moveend</text>
+  <line class="back" x1="590" y1="404" x2="302" y2="404" marker-end="url(#a2b)"/>
+  <text class="lbl b" x="445" y="397" text-anchor="middle">invokeMethodAsync("OnViewChanged", …)</text>
+
+  <!-- 片付け -->
+  <line class="call" x1="300" y1="458" x2="588" y2="458" marker-end="url(#a2)"/>
+  <text class="lbl" x="445" y="451" text-anchor="middle">dispose()</text>
+  <line class="call" x1="590" y1="488" x2="838" y2="488" marker-end="url(#a2)"/>
+  <text class="lbl" x="715" y="481" text-anchor="middle">map.remove()</text>
+  <rect class="notebox" x="310" y="508" width="256" height="26" rx="5"/>
+  <text class="n" x="320" y="526" style="font-size:12px">参照を DisposeAsync / Dispose で解放</text>
+</svg>
+<figcaption>1つの地図が作られてから消えるまでの呼び出し。点線の矢印は戻り値か、C# へ送らないイベント。</figcaption>
+</figure>
+
+<ul>
+  <li><strong>作る</strong>：<code>OnAfterRenderAsync</code> の初回で行います。この時点で <code>host</code> 要素が DOM にあり、JS も動いています。<code>OnInitialized</code> ではまだ要素が無く、プリレンダリング中は JS も動いていません。</li>
+  <li><strong>更新</strong>：ピンの一覧が変わったときだけ <code>setPins</code> を呼びます。ピンは配列でまとめて渡し、JS 側が id ごとに追加・移動・削除を判断します。</li>
+  <li><strong>地図を動かす</strong>：ドラッグ中の <code>move</code> は1秒に何十回も起きるので送りません。止まったときの <code>moveend</code> で1回だけ <code>OnViewChanged</code> を呼びます。C# は <code>shown</code> を更新してから <code>ViewChanged</code> を発火します。親が同じ位置を <code>View</code> に書き戻しても、<code>shown</code> と一致するので <code>setView</code> は呼ばれません。</li>
+  <li><strong>片付け</strong>：JS 側の <code>dispose</code> で地図を破棄してから、C# 側の参照を解放します。順番を逆にすると、JS 側を破棄する手段がなくなります。</li>
+</ul>
+
+<h2>地図ライブラリの選び方</h2>
+
+<div class="figures three">
+  <figure>
+    <img src="assets/2026-11-09-blazor-js-library-architecture/leaflet.jpg" alt="Leaflet のクイックスタートの例。ロンドンの地図の上に赤い円、青い三角形、マーカー、ポップアップが表示されている">
+    <figcaption>Leaflet のクイックスタートの例。タイル画像の上にマーカー・円・多角形を置いている — <a href="https://leafletjs.com/examples/quick-start/example.html">leafletjs.com</a> / 地図 © OpenStreetMap contributors / スクリーンショット（2026-11-08 撮影）</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/2026-11-09-blazor-js-library-architecture/maplibre-demo.png" alt="MapLibre GL JS の「Display a map」の例のページ。右上に v6.17.0 の表示があり、下に ES モジュールを import するコードがある。地図の部分は空白">
+    <figcaption>MapLibre GL JS の例のページ。地図の部分が空白なのは、撮影に使ったヘッドレスブラウザで WebGL が描かれなかったため — <a href="https://maplibre.org/maplibre-gl-js/docs/examples/display-a-map/">maplibre.org</a> / スクリーンショット（2026-11-08 撮影）</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/2026-11-09-blazor-js-library-architecture/openlayers.png" alt="OpenLayers の公式サイト。v10.11.0 の公開のお知らせと、タイルレイヤーやベクタレイヤーなどの機能一覧がある">
+    <figcaption>OpenLayers の公式サイト — <a href="https://openlayers.org/">openlayers.org</a> / スクリーンショット（2026-11-08 撮影）</figcaption>
+  </figure>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>ライブラリ</th><th>地図の描き方</th><th>版（2026-11-09 の npm）</th><th>ライセンス</th><th>向いている場面</th><th>注意</th></tr></thead>
+    <tbody>
+      <tr><td>Leaflet <span class="tag pick">一般的な用途</span></td><td>タイル画像を並べ、マーカーや図形は DOM・SVG・Canvas で描く</td><td>1.9.4（latest）。2.0 は 2.0.0-beta.2 でプレリリース</td><td>BSD-2-Clause</td><td>ピンを置く、範囲を描く、といった一般的な地図。API が小さく覚えやすい</td><td>2.0 は ES モジュールのみ・クラス形式の API に変わる。接着用モジュールに閉じ込めておけば、直すのはその1ファイルで済む</td></tr>
+      <tr><td>MapLibre GL JS <span class="tag pick">件数が多いとき</span></td><td>ベクタータイルを WebGL で描く</td><td>6.17.0（6 系は ES モジュールのみ、WebGL2 が必須）</td><td>BSD-3-Clause</td><td>数万件の点、地図の回転・傾き、地図のスタイルの切り替え</td><td>WebGL2 が使えない環境では表示できない。ベクタータイルとスタイルの配信元が必要</td></tr>
+      <tr><td>OpenLayers</td><td>タイル画像とベクタの両方。Canvas・WebGL</td><td>10.11.0</td><td>BSD-2-Clause</td><td>座標系の変換、WMS などの GIS 機能</td><td>API が大きく、最初に覚えることが多い</td></tr>
+      <tr><td>RadzenGoogleMap</td><td>Google マップ（Radzen.Blazor に同梱）</td><td>Radzen.Blazor 12.1.11 に同梱</td><td>Google Maps Platform の利用規約</td><td>JS を書かずに Radzen だけで済ませたい</td><td>ApiKey と MapId が必要。Google Maps Platform の料金がかかる</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>どのライブラリを選んでも、この構成はそのまま使えます。変わるのは接着用モジュールの中身だけです。たとえば MapLibre GL JS なら、<code>invalidateSize()</code> が <code>resize()</code> になり、ピンはマーカーではなく GeoJSON のソースとして渡すのが向いています。</p>
+
+<h2>実装例：Leaflet をつなぐ</h2>
+
+<h3>1. ライブラリを wwwroot に置く</h3>
+<p>Leaflet 1.9.4 の npm パッケージは、入口が UMD 形式のファイル（<code>dist/leaflet-src.js</code>）だけです。そのままでは ES モジュールとして import できないため、esbuild で1つの ES モジュールにまとめます。CSS と画像は、互いの位置関係を保ったままコピーします。</p>
+<pre><code>// js-src/leaflet-entry.js
+import L from "leaflet";
+export default L;</code></pre>
+<pre><code>npm install leaflet@1.9.4 esbuild --save-dev
+npx esbuild js-src/leaflet-entry.js --bundle --format=esm --minify --outfile=wwwroot/lib/leaflet/leaflet.bundle.js
+cp node_modules/leaflet/dist/leaflet.css wwwroot/lib/leaflet/
+cp -r node_modules/leaflet/dist/images wwwroot/lib/leaflet/</code></pre>
+<pre><code>&lt;!-- wwwroot/index.html の &lt;head&gt; に足す --&gt;
+&lt;link rel="stylesheet" href="lib/leaflet/leaflet.css" /&gt;</code></pre>
+
+<h3>2. 接着用モジュール（MapPanel.razor.js）</h3>
+<pre><code>// MapPanel.razor.js — Leaflet を C# から使うための接着層
+// import のパスは、このファイルの URL から見た相対パス
+import L from "../lib/leaflet/leaflet.bundle.js";
+
+export function create(host, view, dotnet) {
+  const map = L.map(host).setView([view.lat, view.lng], view.zoom);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&amp;copy; &lt;a href="https://www.openstreetmap.org/copyright"&gt;OpenStreetMap&lt;/a&gt; contributors',
+  }).addTo(map);
+
+  // ドラッグ中の move は送らず、止まったときに1回だけ C# に知らせる
+  map.on("moveend", () =&gt; {
+    const c = map.getCenter();
+    dotnet.invokeMethodAsync("OnViewChanged", c.lat, c.lng, map.getZoom());
+  });
+
+  // 非表示のタブやダイアログの中で作られても、表示されたときに大きさを取り直す
+  const resize = new ResizeObserver(() =&gt; map.invalidateSize());
+  resize.observe(host);
+
+  const markers = new Map();   // ピンの id → Leaflet のマーカー（JS 組み込みの Map）
+
+  // C# はこのオブジェクトを IJSObjectReference として受け取る
+  return {
+    setView(lat, lng, zoom) {
+      map.setView([lat, lng], zoom);
+    },
+    // ピンは配列でまとめて受け取り、id ごとに追加・移動・削除する
+    setPins(pins) {
+      const keep = new Set(pins.map(p =&gt; p.id));
+      for (const [id, m] of markers) {
+        if (!keep.has(id)) { m.remove(); markers.delete(id); }
+      }
+      for (const p of pins) {
+        const m = markers.get(p.id);
+        if (m) { m.setLatLng([p.lat, p.lng]); continue; }
+        const added = L.marker([p.lat, p.lng], { title: p.title }).addTo(map);
+        added.on("click", () =&gt; dotnet.invokeMethodAsync("OnPinClicked", p.id));
+        markers.set(p.id, added);
+      }
+    },
+    dispose() {
+      resize.disconnect();
+      map.remove();
+    },
+  };
+}</code></pre>
+
+<h3>3. 位置とピンの型</h3>
+<pre><code>// MapTypes.cs
+public sealed record MapView(double Lat, double Lng, double Zoom)
+{
+    // moveend で返ってくる値は浮動小数点の誤差を含むので、十分に近ければ同じとみなす
+    public bool IsNear(MapView o) =&gt;
+        Math.Abs(Lat - o.Lat) &lt; 1e-7 &amp;&amp; Math.Abs(Lng - o.Lng) &lt; 1e-7 &amp;&amp; Math.Abs(Zoom - o.Zoom) &lt; 1e-3;
+}
+
+public sealed record MapPin(string Id, double Lat, double Lng, string Title);</code></pre>
+<p>緯度・経度・ズームは1つの <code>MapView</code> にまとめて渡します。別々のパラメーターにして <code>@bind</code> すると、緯度だけが更新された途中の状態で <code>setView</code> が呼ばれることがあります。</p>
+
+<h3>4. ラッパーコンポーネント（MapPanel.razor）</h3>
+<pre><code>@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+&lt;div @ref="host" class="map-host"&gt;&lt;/div&gt;
+
+@code {
+    [Parameter] public MapView View { get; set; } = new(35.681, 139.767, 13);
+    [Parameter] public EventCallback&lt;MapView&gt; ViewChanged { get; set; }
+    [Parameter] public IReadOnlyList&lt;MapPin&gt; Pins { get; set; } = [];
+    [Parameter] public EventCallback&lt;string&gt; OnPinClick { get; set; }
+
+    ElementReference host;
+    IJSObjectReference? module;
+    IJSObjectReference? map;
+    DotNetObjectReference&lt;MapPanel&gt;? self;
+    MapView? shown;                    // 地図にいま表示されている位置
+    IReadOnlyList&lt;MapPin&gt;? sentPins;   // 最後に JS へ渡したピン
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await JS.InvokeAsync&lt;IJSObjectReference&gt;("import", "./Components/MapPanel.razor.js");
+        self = DotNetObjectReference.Create(this);
+        shown = View;
+        map = await module.InvokeAsync&lt;IJSObjectReference&gt;("create", host, View, self);
+        await SyncPinsAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (map is null) return;
+        // 地図の表示と違うときだけ動かす。moveend からの書き戻しはここで止まる
+        if (shown is null || !shown.IsNear(View))
+        {
+            shown = View;
+            await map.InvokeVoidAsync("setView", View.Lat, View.Lng, View.Zoom);
+        }
+        await SyncPinsAsync();
+    }
+
+    async Task SyncPinsAsync()
+    {
+        // 同じリストなら送らない。ピンを変えるときは親がリストを作り直して渡す
+        if (map is null || ReferenceEquals(Pins, sentPins)) return;
+        sentPins = Pins;
+        await map.InvokeVoidAsync("setPins", Pins);
+    }
+
+    [JSInvokable]
+    public Task OnViewChanged(double lat, double lng, double zoom)
+    {
+        shown = new MapView(lat, lng, zoom);
+        return ViewChanged.InvokeAsync(shown);
+    }
+
+    [JSInvokable]
+    public Task OnPinClicked(string id) =&gt; OnPinClick.InvokeAsync(id);
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (map is not null) { await map.InvokeVoidAsync("dispose"); await map.DisposeAsync(); }
+            if (module is not null) await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }   // Server で回線が切れた後は JS を呼べない
+        self?.Dispose();
+    }
+}</code></pre>
+<pre><code>/* MapPanel.razor.css — 高さを決めないと地図は表示されない */
+.map-host { height: 480px; }</code></pre>
+
+<h3>5. 使う側</h3>
+<pre><code>&lt;MapPanel @bind-View="view" Pins="shops" OnPinClick="ShowShop" /&gt;
+&lt;ShopDetail ShopId="@selectedId" /&gt;
+
+@code {
+    MapView view = new(35.681, 139.767, 13);
+    IReadOnlyList&lt;MapPin&gt; shops = [];
+    string? selectedId;
+
+    void ShowShop(string id) =&gt; selectedId = id;
+}</code></pre>
+<p>ページは Leaflet の存在を知りません。クリックしたピンの詳細は、地図の横に置いた Blazor のコンポーネント（ここでは <code>ShopDetail</code>）に出します。</p>
+
+<div class="note"><span class="label">補足</span><p>C# の record は、JS に渡すときに camelCase の JSON に変換されます。<code>MapView.Lat</code> は JS では <code>view.lat</code>、<code>MapPin.Id</code> は <code>p.id</code> になります。</p></div>
+
+<h2>地図ライブラリで気をつけること</h2>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>問題</th><th>起きること</th><th>対策</th></tr></thead>
+    <tbody>
+      <tr><td>表示位置の往復</td><td>C# から <code>setView</code> → <code>moveend</code> → <code>ViewChanged</code> → 親が <code>View</code> を更新 → また <code>setView</code>、と続く。誤差で値がずれると止まらない</td><td>ラッパーが <code>shown</code> を持ち、パラメーターと十分に違うときだけ <code>setView</code> を呼ぶ</td></tr>
+      <tr><td><code>View</code> を片方向だけで渡す</td><td>利用者が地図を動かしたあと、親が別の理由で描き直すと、地図が最初の位置に戻る</td><td><code>View</code> を渡すなら <code>@bind-View</code> で受け取る。位置を管理しないなら <code>View</code> を渡さない</td></tr>
+      <tr><td>ドラッグ中のイベント</td><td><code>move</code> や <code>mousemove</code> を毎回 C# に送ると、Server では通信があふれ、WebAssembly でも描き直しが重なる</td><td><code>moveend</code> だけを送る。マウス位置の座標表示などは、JS が自分の DOM に直接書く</td></tr>
+      <tr><td>大きさ 0 のまま作られる</td><td>非表示のタブやダイアログの中で作ると、地図が灰色のまま、またはタイルが一部しか出ない</td><td><code>ResizeObserver</code> で <code>invalidateSize()</code> を呼ぶ（MapLibre は <code>resize()</code>）。<code>host</code> には CSS で高さを必ず決める</td></tr>
+      <tr><td><code>host</code> 要素が作り直される</td><td><code>@if</code> で地図を出し入れしたり <code>@key</code> が変わったりすると、<code>div</code> ごと地図が消える。JS 側の地図は残ったまま</td><td>隠すだけなら CSS で非表示にする。出し入れするなら、コンポーネントごと出し入れして <code>DisposeAsync</code> を通す</td></tr>
+      <tr><td>ピンの数が多い</td><td>1件ずつ JS を呼ぶと、境界を何千回も越える。Leaflet の通常のマーカーは DOM 要素なので、数千件で重くなる</td><td>配列でまとめて渡し、JS 側で差分を取る。Leaflet なら <code>preferCanvas</code> と <code>circleMarker</code>、またはクラスタリングのプラグインを使う。数万件なら MapLibre GL JS の GeoJSON ソースを使う</td></tr>
+      <tr><td>ポップアップに Blazor の部品を出したい</td><td>JS が作った DOM の中には、Blazor の部品を普通の書き方では描けない</td><td>クリックで id を C# に知らせ、詳細は地図の横の Blazor のパネルに出す。ポップアップの中身が文字だけなら JS 側で作る</td></tr>
+      <tr><td>CSS と画像の置き場所</td><td><code>leaflet.css</code> が無いとタイルがばらばらに並ぶ。CSS だけ移して画像を置き忘れると、マーカーの画像が出ない</td><td><code>leaflet.css</code> と <code>images/</code> を同じフォルダに置き、<code>index.html</code> で CSS を読み込む</td></tr>
+      <tr><td>CSS isolation が中に届かない</td><td><code>MapPanel.razor.css</code> の指定は、Blazor が描いた <code>host</code> 要素にしか付かない。Leaflet が作った要素には付かない</td><td>Leaflet の要素の見た目を変えるときは <code>::deep</code> を付けるか、通常の CSS ファイルに書く</td></tr>
+      <tr><td>タイルの配信元</td><td><code>tile.openstreetmap.org</code> には利用規約があり、大量のアクセスや本番のサービスには向かない。帰属表示も必須</td><td>試作には使ってよいが、本番では契約したタイル配信サービスか、自前のタイルサーバーを使う</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>JS の読み込み方と呼び出し方の選択肢</h2>
+
+<figure>
+  <img src="assets/2026-11-09-blazor-js-library-architecture/ms-location.png" alt="Microsoft Learn の「JavaScript location in ASP.NET Core Blazor apps」のページ。JS collocation と JS modules の組み合わせを勧める一文がある">
+  <figcaption>Microsoft Learn「JavaScript location in ASP.NET Core Blazor apps」。インラインの JS は勧めず、collocated JS と JS モジュールの組み合わせを勧めている — <a href="https://learn.microsoft.com/en-us/aspnet/core/blazor/javascript-interoperability/location-of-javascript">learn.microsoft.com</a> / スクリーンショット（2026-11-08 撮影）</figcaption>
+</figure>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>方法</th><th>書き方</th><th>Server</th><th>向いている場面</th><th>欠点</th></tr></thead>
+    <tbody>
+      <tr><td>ES モジュール ＋ <code>IJSObjectReference</code> <span class="tag pick">推奨</span></td><td><code>JS.InvokeAsync&lt;IJSObjectReference&gt;("import", "./x.razor.js")</code></td><td>動く</td><td>ほぼすべて。部品ごとに JS を閉じ込められる</td><td>接着用の JS を1ファイル書く必要がある</td></tr>
+      <tr><td>window に置いたグローバル関数</td><td><code>&lt;script&gt;</code> で読み込み、<code>JS.InvokeVoidAsync("myMap.init", …)</code></td><td>動く</td><td>数行で済む使い捨ての処理</td><td>名前がぶつかる。読み込み順に左右される。Microsoft も本番ではモジュールを勧めている</td></tr>
+      <tr><td>.NET 10 の <code>InvokeConstructorAsync</code> / <code>GetValueAsync</code> / <code>SetValueAsync</code></td><td><code>JS.InvokeConstructorAsync("L.Map", host)</code>（グローバルの <code>L</code> がある場合）</td><td>動く</td><td>接着用の JS を書かずに、ライブラリのオブジェクトを C# から直接作って操作する</td><td>呼び出しが細かくなり、境界を越える回数が増える。ライブラリの API が C# 側に出てくる。イベントの受け取りは結局 JS が要る</td></tr>
+      <tr><td><code>[JSImport]</code> / <code>[JSExport]</code></td><td><code>[JSImport("create", "map-panel")] static partial JSObject Create(...)</code></td><td>動かない（WebAssembly 専用）</td><td>WebAssembly だけで動かし、呼び出し回数がとても多い処理</td><td>Server と Auto では使えない。RCL の collocated JS にも対応していない</td></tr>
+      <tr><td>既存のラッパー NuGet</td><td><code>RadzenGoogleMap</code> など</td><td>動く</td><td>欲しい部品がすでにある</td><td>ライブラリの新しい版への追従が遅れることがある。細かい設定が公開されていないことがある</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>.NET 10 の新しい API は、接着用モジュールの代わりではなく補助として使います。たとえば、地図の現在の境界を1回読むだけのために JS 関数を足したくないときに <code>GetValueAsync</code> を使います。</p>
+
+<div class="note"><span class="label">補足</span><p>WebAssembly でしか動かさない場合は、<code>IJSInProcessObjectReference</code> を使うと同期呼び出しもできます。ただし Server や Auto に移すと使えなくなります。部品を使い回す予定があるなら、非同期の <code>IJSObjectReference</code> に揃えておくほうが安全です。</p></div>
+
+<h2>どの JS ライブラリにも共通する注意</h2>
+
+<div class="caution"><span class="label">注意</span>
+<ol>
+  <li><strong>Blazor が描いた要素の中身を JS で書き換えない。</strong>Blazor は自分が描いた DOM の記録と比べて差分だけを更新します。JS が中身を変えると記録と実物が食い違い、表示が崩れたり例外が出たりします。ライブラリには、Blazor が子要素を描かない空の <code>&lt;div @ref&gt;</code> を渡します。</li>
+  <li><strong>ブラウザはパッケージ名だけの import を解決できない。</strong><code>import L from "leaflet"</code> はそのままでは読み込めません。esbuild などで1ファイルにするか、import map を使います。CDN から直接読む方法は、オフラインで動かず、版の固定も別に管理が必要になります。</li>
+  <li><strong>大きなデータは JSON にしない。</strong><code>byte[]</code> はバイナリのまま渡ります（.NET 6 以降）。さらに大きいデータは <code>DotNetStreamReference</code> でストリームとして渡します。</li>
+  <li><strong>片付けを忘れない。</strong>JS の <code>dispose</code> を呼ばないと、ライブラリが登録したイベントや ResizeObserver が残ります。<code>DotNetObjectReference</code> を <code>Dispose</code> しないと、C# のコンポーネントがメモリから解放されません。</li>
+  <li><strong><code>[JSInvokable]</code> は外から呼べる入口として扱う。</strong>Server では、利用者のブラウザから任意の引数で呼ばれる可能性があります。ピンの id などは、C# 側の一覧にあるか確かめてから使います。</li>
+</ol>
+</div>
+
+<h2>このプロジェクトでの当てはめ</h2>
+
+<figure>
+  <img src="assets/2026-11-09-blazor-js-library-architecture/designer.png" alt="Radzen UI デザイナーの画面。左に部品の一覧、中央に会員登録フォームのキャンバス、下にコード欄がある">
+  <figcaption>radzen-ui-designer の画面。キャンバスの拡大・移動・ドラッグは designer.js が受け持ち、結果を C# に通知している — <a href="https://radzen-ui-designer.pages.dev">radzen-ui-designer.pages.dev</a> / スクリーンショット（2026-11-08 撮影）</figcaption>
+</figure>
+
+<p><code>Designer.razor</code> と <code>designer.js</code> は、この構成と同じ形で書かれています。違いは、包んでいるのが外部のライブラリではなく自作の処理だという点だけです。キャンバスの拡大・移動を JS が持ち、決まった時点で C# に知らせる点は、地図の表示位置の扱いと同じです。</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>構成図の要素</th><th>このプロジェクトでの実装</th><th>場所</th></tr></thead>
+    <tbody>
+      <tr><td>モジュールの読み込み</td><td><code>JS.InvokeAsync&lt;IJSObjectReference&gt;("import", "./js/designer.js")</code></td><td><code>Pages/Designer.razor:139</code></td></tr>
+      <tr><td>作成と、操作用オブジェクトの受け取り</td><td><code>module.InvokeAsync&lt;IJSObjectReference&gt;("init", appEl, selfRef)</code></td><td><code>Pages/Designer.razor:141</code></td></tr>
+      <tr><td>接着用モジュールが返すオブジェクト</td><td><code>{ refresh(), fit(), dispose() }</code></td><td><code>wwwroot/js/designer.js:734</code></td></tr>
+      <tr><td>JS から C# への通知</td><td><code>dotnet.invokeMethodAsync("Drop", …)</code> など。受け側は <code>[JSInvokable]</code> の5つのメソッド</td><td><code>designer.js:442</code>〜、<code>Designer.razor:181</code>〜</td></tr>
+      <tr><td>片付け</td><td><code>handle.dispose()</code> → 参照の <code>DisposeAsync</code> → <code>selfRef.Dispose()</code>。<code>JSDisconnectedException</code> も処理済み</td><td><code>Pages/Designer.razor:239</code></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>このプロジェクトに地図を足す場合は、次の順で進めます。</p>
+<ol>
+  <li>Google マップでよく、料金を受け入れられるなら、Radzen.Blazor に同梱の <code>RadzenGoogleMap</code> を使う。JS を書く必要がない</li>
+  <li>OpenStreetMap 系の地図を使いたい場合や、料金をかけたくない場合は、この構成で Leaflet か MapLibre GL JS を足す</li>
+  <li>ライブラリは <code>wwwroot/lib/</code> に置く。Cloudflare Pages からは静的ファイルとしてそのまま配信される。タイル画像は利用者のブラウザがタイル配信元から直接読み込む</li>
+</ol>
+
+<div class="note"><span class="label">補足</span><p>このプロジェクトは WebAssembly 単体で動くため、<code>[JSImport]</code> や同期呼び出しも使えます。それでも、既存の <code>designer.js</code> と書き方を揃えるため、<code>IJSObjectReference</code> による非同期の呼び出しを勧めます。</p></div>
+
+<h2>出典</h2>
+<div class="sources">
+<ol>
+  <li><a href="https://learn.microsoft.com/en-us/aspnet/core/blazor/javascript-interoperability/location-of-javascript">JavaScript location in ASP.NET Core Blazor apps — Microsoft Learn</a></li>
+  <li><a href="https://learn.microsoft.com/en-us/aspnet/core/blazor/javascript-interoperability/">ASP.NET Core Blazor JavaScript interoperability (JS interop) — Microsoft Learn</a></li>
+  <li><a href="https://learn.microsoft.com/en-us/aspnet/core/blazor/javascript-interoperability/call-javascript-from-dotnet">Call JavaScript functions from .NET methods in ASP.NET Core Blazor — Microsoft Learn</a></li>
+  <li><a href="https://learn.microsoft.com/en-us/aspnet/core/blazor/javascript-interoperability/call-dotnet-from-javascript">Call .NET methods from JavaScript functions in ASP.NET Core Blazor — Microsoft Learn</a></li>
+  <li><a href="https://learn.microsoft.com/en-us/aspnet/core/blazor/javascript-interoperability/import-export-interop">JavaScript [JSImport]/[JSExport] interop with ASP.NET Core Blazor — Microsoft Learn</a></li>
+  <li><a href="https://learn.microsoft.com/en-us/aspnet/core/blazor/performance/javascript-interoperability">ASP.NET Core Blazor JavaScript interoperability performance best practices — Microsoft Learn</a></li>
+  <li><a href="https://learn.microsoft.com/en-us/dotnet/api/microsoft.jsinterop.ijsobjectreference">IJSObjectReference Interface — Microsoft Learn</a></li>
+  <li><a href="https://github.com/dotnet/aspnetcore/pull/62588">dotnet/aspnetcore PR #62588（InvokeNew を InvokeConstructor に改名し、Get/SetValueAsync の多重定義を追加）</a></li>
+  <li><a href="https://www.meziantou.net/optimizing-js-interop-in-a-blazor-webassembly-application.htm">Optimizing JS Interop in a Blazor WebAssembly application — Meziantou's blog</a></li>
+  <li><a href="https://leafletjs.com/download.html">Download Leaflet — leafletjs.com</a></li>
+  <li><a href="https://leafletjs.com/2025/05/18/leaflet-2.0.0-alpha.html">Leaflet 2.0.0-alpha の公開告知 — leafletjs.com</a></li>
+  <li><a href="https://leafletjs.com/reference.html">Leaflet API reference（invalidateSize、preferCanvas など）</a></li>
+  <li><a href="https://maplibre.org/news/2026-08-02-maplibre-newsletter-jul-2026/">MapLibre Newsletter July 2026 — maplibre.org</a></li>
+  <li><a href="https://openlayers.org/">OpenLayers</a></li>
+  <li><a href="https://blazor.radzen.com/googlemap">GoogleMap — Radzen Blazor Components</a></li>
+  <li><a href="https://operations.osmfoundation.org/policies/tiles/">Tile Usage Policy — OpenStreetMap Foundation</a></li>
+  <li><a href="https://esbuild.github.io/">esbuild</a></li>
+</ol>
+</div>
+</main>
+
+<footer class="doc">
+  <span>radzen-ui-designer</span>
+  <span>2026-11-09 作成</span>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('theme');
+  var KEY = 'report-theme';
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+  btn.addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.hasAttribute('data-theme') &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

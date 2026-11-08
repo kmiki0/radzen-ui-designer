@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>調査レポート一覧</title>
+<meta name="date" content="2026-11-09">
+<style>
+/* ---- tokens ---------------------------------------------------------- */
+:root {
+  --bg:        #faf9f7;
+  --bg-sunk:   #f1efec;
+  --bg-raised: #ffffff;
+  --line:      #e2ded8;
+  --line-soft: #ece9e4;
+  --ink:       #23211e;
+  --ink-mid:   #5c574f;
+  --ink-dim:   #8a8378;
+  --accent:    #1f6f6b;
+  --accent-bg: #e4f0ef;
+  --warn:      #9a5b12;
+  --warn-bg:   #f8eedd;
+  --radius: 10px;
+  --page-max: 1600px;  /* ページ幅の上限。これ以下はウィンドウ幅に追従する */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #16181a;
+    --bg-sunk:   #101214;
+    --bg-raised: #1e2124;
+    --line:      #32373c;
+    --line-soft: #262b2f;
+    --ink:       #e6e3de;
+    --ink-mid:   #a7a29a;
+    --ink-dim:   #767068;
+    --accent:    #63c8bf;
+    --accent-bg: #16302f;
+    --warn:      #e0a860;
+    --warn-bg:   #2e2517;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:        #16181a;
+  --bg-sunk:   #101214;
+  --bg-raised: #1e2124;
+  --line:      #32373c;
+  --line-soft: #262b2f;
+  --ink:       #e6e3de;
+  --ink-mid:   #a7a29a;
+  --ink-dim:   #767068;
+  --accent:    #63c8bf;
+  --accent-bg: #16302f;
+  --warn:      #e0a860;
+  --warn-bg:   #2e2517;
+}
+
+/* ---- reset / base ---------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI",
+               "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
+  font-size: 16px;
+  line-height: 1.9;
+  font-feature-settings: "palt" 1;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  line-break: strict;
+}
+
+/* ---- layout ---------------------------------------------------------- */
+/* ウィンドウ幅を使う。上限だけ決めて、あとは流動させる。
+   行長で全体を縛ると、広いモニタでも中央に細い柱が立つだけになる。 */
+.page { max-width: var(--page-max); margin: 0 auto; padding: 3.5rem clamp(1.1rem, 3vw, 3rem) 6rem; }
+@media (max-width: 640px) { .page { padding: 2rem 1.1rem 4rem; } }
+
+header.doc {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1.6rem;
+  margin-bottom: 2.6rem;
+}
+header.doc .kicker {
+  font-size: .75rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0 0 .7rem;
+}
+header.doc h1 {
+  font-size: clamp(1.65rem, 1.2rem + 2vw, 2.35rem);
+  line-height: 1.35;
+  letter-spacing: -.01em;
+  margin: 0 0 .8rem;
+  font-weight: 700;
+}
+header.doc .lede { color: var(--ink-mid); margin: 0 0 1.1rem; font-size: 1.02rem; }
+header.doc .meta {
+  display: flex; flex-wrap: wrap; gap: .5rem 1.1rem;
+  font-size: .8rem; color: var(--ink-dim); margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- typography ------------------------------------------------------ */
+h2 {
+  font-size: 1.32rem;
+  line-height: 1.5;
+  margin: 3.2rem 0 1rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line-soft);
+  font-weight: 700;
+  letter-spacing: -.005em;
+}
+h2:first-of-type { margin-top: 0; border-top: 0; padding-top: 0; }
+h3 { font-size: 1.06rem; margin: 2.1rem 0 .6rem; font-weight: 700; }
+h4 { font-size: .95rem; margin: 1.5rem 0 .4rem; font-weight: 700; color: var(--ink-mid); }
+p  { margin: 0 0 1.15rem; }
+strong { font-weight: 700; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: .18em; }
+a:hover { text-decoration-thickness: 2px; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 2.8rem 0; }
+small { font-size: .82rem; color: var(--ink-dim); }
+
+ul, ol { margin: 0 0 1.15rem; padding-left: 1.35rem; }
+li { margin: .3rem 0; }
+li > ul, li > ol { margin-top: .3rem; margin-bottom: .3rem; }
+
+blockquote {
+  margin: 1.4rem 0;
+  padding: .2rem 0 .2rem 1.1rem;
+  border-left: 3px solid var(--line);
+  color: var(--ink-mid);
+}
+
+/* ---- code ------------------------------------------------------------ */
+code, kbd, pre {
+  font-family: "Cascadia Code", "JetBrains Mono", ui-monospace, SFMono-Regular,
+               "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-feature-settings: normal;
+}
+:not(pre) > code {
+  background: var(--bg-sunk);
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  padding: .1em .38em;
+  font-size: .875em;
+  overflow-wrap: break-word;
+}
+pre {
+  background: var(--bg-sunk);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  font-size: .855rem;
+  line-height: 1.7;
+  margin: 0 0 1.35rem;
+  -webkit-overflow-scrolling: touch;
+}
+pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+
+/* ---- figures --------------------------------------------------------- */
+/* 参照画像は reports/assets/<slug>/ に落として相対パスで引く。file:// で開く
+   文書なので、外部ホストを直接指すと相手の都合とネットの有無で中身が消える。 */
+figure {
+  margin: 0 0 1.6rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .75rem .75rem .2rem;
+}
+figure img, figure svg { display: block; width: 100%; height: auto; border-radius: 6px; background: var(--bg-sunk); }
+figcaption {
+  font-size: .82rem; line-height: 1.7; color: var(--ink-dim);
+  padding: .55rem .25rem .6rem;
+}
+figcaption a { color: var(--ink-mid); }
+/* 並べて比べるための格子。figure をそのまま入れる。 */
+.figures { display: grid; gap: .85rem; margin: 0 0 1.6rem; }
+.figures > figure { margin: 0; }
+@media (min-width: 720px) {
+  .figures.two   { grid-template-columns: repeat(2, 1fr); }
+  .figures.three { grid-template-columns: repeat(3, 1fr); }
+  .figures.four  { grid-template-columns: repeat(4, 1fr); }
+}
+/* 暗い配色では、白背景の図版だけが板のように光る。わずかに沈めて馴染ませる
+   ——反転はしない。図の中の色が意味を持っていることがあるので。 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) figure img { filter: brightness(.88); }
+}
+:root[data-theme="dark"] figure img { filter: brightness(.88); }
+
+/* ---- tables ---------------------------------------------------------- */
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  -webkit-overflow-scrolling: touch;
+}
+table { border-collapse: collapse; width: 100%; font-size: .89rem; line-height: 1.65; }
+/* Latin の長い語を折らない。溢れたぶんは .table-wrap 側が横スクロールする。
+   日本語は禁則で普通に折り返るので、これで両方まともになる。 */
+th, td {
+  text-align: left; padding: .62rem .85rem;
+  border-bottom: 1px solid var(--line-soft); vertical-align: top;
+  overflow-wrap: normal;
+}
+tbody td:first-child { min-width: 11rem; }
+thead th {
+  background: var(--bg-sunk);
+  font-weight: 700;
+  font-size: .78rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ink-mid);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---- callouts -------------------------------------------------------- */
+.note, .caution, .verdict {
+  border-radius: var(--radius);
+  padding: .95rem 1.15rem;
+  margin: 0 0 1.5rem;
+  font-size: .94rem;
+}
+.note    { background: var(--accent-bg); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+.caution { background: var(--warn-bg);   border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+.verdict { background: var(--bg-raised); border: 1px solid var(--line); border-left: 4px solid var(--accent); }
+.note > :last-child, .caution > :last-child, .verdict > :last-child { margin-bottom: 0; }
+.note .label, .caution .label, .verdict .label {
+  display: block; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+  font-weight: 700; margin-bottom: .35rem;
+}
+.note .label { color: var(--accent); }
+.caution .label { color: var(--warn); }
+.verdict .label { color: var(--accent); }
+
+/* ---- cards ----------------------------------------------------------- */
+.cards { display: grid; gap: .85rem; margin: 0 0 1.6rem; }
+@media (min-width: 720px) { .cards.two { grid-template-columns: 1fr 1fr; } }
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+}
+.card > :last-child { margin-bottom: 0; }
+.card h3 { margin-top: 0; font-size: 1rem; }
+.tag {
+  display: inline-block; font-size: .7rem; font-weight: 700; letter-spacing: .06em;
+  padding: .16em .55em; border-radius: 4px;
+  background: var(--bg-sunk); color: var(--ink-mid); border: 1px solid var(--line-soft);
+  vertical-align: .12em; white-space: nowrap;
+}
+.tag.pick { background: var(--accent-bg); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* ---- sources --------------------------------------------------------- */
+.sources { font-size: .86rem; color: var(--ink-mid); }
+.sources ol { padding-left: 1.5rem; }
+.sources li { margin: .38rem 0; overflow-wrap: anywhere; }
+
+footer.doc {
+  margin-top: 4rem; padding-top: 1.3rem;
+  border-top: 1px solid var(--line);
+  font-size: .78rem; color: var(--ink-dim);
+  display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between;
+}
+
+/* ---- theme toggle ---------------------------------------------------- */
+#theme {
+  position: fixed; top: .9rem; right: .9rem; z-index: 10;
+  background: var(--bg-raised); color: var(--ink-mid);
+  border: 1px solid var(--line); border-radius: 999px;
+  font: inherit; font-size: .75rem; line-height: 1;
+  padding: .5rem .8rem; cursor: pointer;
+}
+#theme:hover { color: var(--ink); border-color: var(--ink-dim); }
+
+@media print {
+  #theme { display: none; }
+  body { background: #fff; color: #000; font-size: 10.5pt; }
+  .page { max-width: none; padding: 0; }
+  a { color: #000; }
+  h2 { break-after: avoid; }
+  .table-wrap, pre, .card, figure { break-inside: avoid; }
+  figure img { filter: none; }
+}
+</style>
+</head>
+<body>
+<button id="theme" type="button" aria-label="配色を切り替える">◐ 表示</button>
+
+<div class="page">
+
+<header class="doc">
+  <p class="kicker">INDEX</p>
+  <h1>調査レポート一覧</h1>
+  <p class="lede">1 件のレポート。新しいものが上です。</p>
+  <p class="meta"><span>2026-11-09</span><span></span></p>
+</header>
+
+<main>
+<ul class="cards index-list">
+  <li class="card">
+    <p class="entry-meta"><span class="tag">設計検討</span> <span>2026-11-09</span></p>
+    <h3><a href="./2026-11-09-blazor-js-library-architecture.html">Blazor から地図ライブラリを使う構成</a></h3>
+    <p>地図ライブラリは自作の小さな ES モジュールで包み、C# のラッパーコンポーネント1つから操作する構成を勧めます。構成図、呼び出しの流れ、Leaflet での実装例、地図に特有の注意点をまとめました。</p>
+  </li>
+</ul>
+
+<style>
+.index-list { list-style: none; padding: 0; }
+.index-list h3 { margin: .1rem 0 .4rem; }
+.index-list h3 a { text-decoration: none; }
+.index-list h3 a:hover { text-decoration: underline; }
+.index-list p { margin-bottom: 0; color: var(--ink-mid); font-size: .92rem; }
+.entry-meta { display: flex; align-items: center; gap: .6rem; font-size: .78rem; color: var(--ink-dim); margin: 0 0 .1rem; }
+</style>
+</main>
+
+<footer class="doc">
+  <span></span>
+  <span>2026-11-09 作成</span>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('theme');
+  var KEY = 'report-theme';
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+  btn.addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.hasAttribute('data-theme') &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
