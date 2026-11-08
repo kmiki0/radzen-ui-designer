@@ -13,6 +13,7 @@ Radzen.Blazor の部品を画面の上で並べて、そのまま貼り付けら
 - キャンバスには本物の Radzen の部品を描く。PC（1280px）とスマホ（360px）の画面を並べて見比べられる
 - 右のパネルでパラメーター・スタイル・イベントを変えると、画面とコードにすぐ反映される
 - 下のコード欄は、部品・属性・文字列・変数・メソッドなどで色を分ける。キャンバスで選んだ部品の行に色が付き、行をクリックするとその部品を選ぶ
+- コード欄の「編集」で、コードを直接書き換えて部品に反映できる（「反映」か Ctrl＋Enter）。読めるのはデザイナーにある部品とそのパラメーターだけで、読めない所は行番号を付けて知らせる
 - 入力部品は `@bind-Value` の変数を、ボタンは `Click` のメソッドを `@code` に出すので、貼り付ければそのままビルドできる
 - 「プレビュー」で、部品を実際に操作して確かめられる
 - 元に戻す・やり直す（100 回まで）。作った画面は、そのブラウザの localStorage に自動で保存する
@@ -46,7 +47,7 @@ dotnet run --project RadzenUiDesigner
 dotnet test
 ```
 
-編集の処理（追加・移動・削除・元に戻す）と、コードの生成（変数名がぶつかる場合や予約語の扱い、行の範囲）を確かめる。
+編集の処理（追加・移動・削除・元に戻す）と、コードの生成（変数名がぶつかる場合や予約語の扱い、行の範囲）、コードの読み取り（書き出したコードを読むと元に戻るか、読めない所を行番号付きで知らせるか）を確かめる。
 
 ## Cloudflare に公開する
 
@@ -74,6 +75,7 @@ Pages のプロジェクトは、`npx wrangler pages project create radzen-ui-de
 | `RadzenUiDesigner/Designer/DesignDocument.cs` | 編集の処理。部品の木・選択・元に戻す／やり直す |
 | `RadzenUiDesigner/Designer/ComponentCatalog.cs` | 使える部品の一覧。パラメーターはリフレクションで読む |
 | `RadzenUiDesigner/Designer/CanvasRenderer.cs` | 部品の木を、本物の Radzen の部品として描く |
+| `RadzenUiDesigner/Designer/RazorReader.cs` | コード欄で書き換えたコードを読み、部品の木に組み直す（RazorWriter の逆） |
 | `RadzenUiDesigner/Designer/RazorWriter.cs` | `.razor` のコードを作る。色分けと、部品ごとの行の範囲も記録する |
 | `RadzenUiDesigner/wwwroot/js/designer.js` | キャンバスの移動・拡大縮小、選択、ドラッグ＆ドロップ、キー操作 |
 | `RadzenUiDesigner/wwwroot/css/designer.css` | 画面の見た目。色は Radzen のテーマの変数（`--rz-*`）を使う |

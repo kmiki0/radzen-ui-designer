@@ -684,6 +684,80 @@ body.dz-splitting, body.dz-splitting * { cursor: ns-resize !important; user-sele
 }
 .dz-tbtn .rzi { font-size: 16px !important; }
 .dz-tbtn:disabled { opacity: 0.4; }
+.dz-tbtn.solid { background: var(--dz-primary); color: #fff !important; }
+.dz-tbtn.solid:hover { filter: brightness(1.1); }
+.dz-bottom-bar small.dz-bottom-state { color: var(--dz-primary); font-weight: 500; }
+
+/* コードの編集。行番号と入力欄を同じ箱に入れ、箱ごとスクロールする（入力欄は中身の行数と幅に合わせる） */
+.dz-code-edit { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dz-code-msg {
+    flex: none;
+    padding: 6px 16px;
+    border-bottom: 1px solid var(--dz-line);
+    color: var(--dz-muted);
+    font-size: 12px;
+    line-height: 1.6;
+}
+.dz-code-msg .rzi { font-size: 16px !important; vertical-align: -3px; margin-right: 4px; }
+.dz-code-msg.warn { color: #8a5300; background: #fff6e0; }
+.dz-code-msg.err {
+    max-height: 40%;
+    overflow: auto;
+    color: var(--rz-danger-darker, #b3261e);
+    background: var(--rz-danger-lighter, rgb(244 67 54 / 0.08));
+}
+.dz-code-msg ul { margin: 2px 0 0; padding: 0; list-style: none; }
+.dz-code-msg li button {
+    min-width: 4.6em;
+    margin-right: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+.dz-code-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    align-items: flex-start;
+    font: 12.5px/1.6 Consolas, "Cascadia Mono", "BIZ UDGothic", monospace;
+}
+.dz-code-gutter {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    flex: none;
+    width: 3.6em;
+    padding: 8px 0.4em 14px 0;
+    background: var(--dz-surface);
+    color: var(--dz-faint);
+    text-align: right;
+    user-select: none;
+}
+.dz-code-gutter > div { height: 1.6em; }
+.dz-code-gutter > .err { color: var(--rz-danger, #f44336); font-weight: 700; box-shadow: inset 3px 0 0 var(--rz-danger, #f44336); }
+.dz-code-input {
+    flex: 1 0 auto;
+    box-sizing: content-box;
+    margin: 0;
+    padding: 8px 16px 14px 1.2em;
+    border: 0;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    white-space: pre;
+    tab-size: 4;
+    background: transparent;
+    color: #1f1f1f;
+    font: inherit;
+}
 .dz-source-code {
     position: relative;   /* 行の offsetTop をこの中の位置にする（選んだ行までのスクロールに使う） */
     flex: 1;

@@ -650,6 +650,13 @@ export function init(app, dotnet) {
   }
 
   function onKeyDown(e) {
+    // コードの編集欄では、Tab でフォーカスを移さずに空白 4 つを入れる（入力として扱うので、元に戻すも効く）
+    if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey
+        && e.target instanceof HTMLTextAreaElement && e.target.classList.contains("dz-code-input")) {
+      e.preventDefault();
+      document.execCommand("insertText", false, "    ");
+      return;
+    }
     if (isTyping(e.target)) return;
     if (e.key === " ") {
       // Space を押している間は、ドラッグでキャンバスを動かす
@@ -784,4 +791,24 @@ export async function copyText(text) {
     ta.remove();
     return ok;
   }
+}
+
+// コードの編集欄で、line 行目（1 から）を選び、その行が見えるように外側の箱をスクロールする。
+// 反映できなかったときに、間違いのある行へ移るのに使う
+export function revealLine(ta, line) {
+  if (!(ta instanceof HTMLTextAreaElement)) return;
+  const lines = ta.value.split("\n");
+  const n = Math.min(Math.max(line, 1), lines.length);
+  let start = 0;
+  for (let i = 0; i < n - 1; i++) start += lines[i].length + 1;
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(start, start + lines[n - 1].length);
+  const box = ta.closest(".dz-code-scroll");
+  if (!box) return;
+  const style = getComputedStyle(ta);
+  const lineHeight = parseFloat(style.lineHeight) || 20;
+  const top = parseFloat(style.paddingTop) + (n - 1) * lineHeight;
+  const visible = top >= box.scrollTop && top + lineHeight <= box.scrollTop + box.clientHeight;
+  // 縦と横は 1 回の scrollTo で動かす（scrollLeft を別に変えると、滑らかなスクロールが止まる）
+  box.scrollTo({ top: visible ? box.scrollTop : Math.max(0, top - box.clientHeight / 3), left: 0, behavior: "smooth" });
 }
