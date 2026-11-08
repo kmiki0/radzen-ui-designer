@@ -75,6 +75,97 @@ public sealed class RazorWriterTests
     }
 
     [TestMethod]
+    public void Items_の選択肢は_Items_の中に部品として並べる()
+    {
+        var root = Root(Node("CheckBoxList", [(DesignNode.VarKey, "tags"), (DesignNode.ItemsKey, "A\nB")]));
+        var lines = Lines(RazorWriter.Write(root));
+        CollectionAssert.AreEqual(new[]
+        {
+            """<RadzenCheckBoxList @bind-Value="tags" TValue="string">""",
+            "    <Items>",
+            """        <RadzenCheckBoxListItem Text="A" Value="@("A")" />""",
+            """        <RadzenCheckBoxListItem Text="B" Value="@("B")" />""",
+            "    </Items>",
+            "</RadzenCheckBoxList>",
+        }, lines[..6]);
+        CollectionAssert.Contains(lines, "    IEnumerable<string>? tags;");
+    }
+
+    [TestMethod]
+    public void ChildItems_の選択肢は_タグの中にそのまま並べる()
+    {
+        var root = Root(Node("SplitButton", [("Text", "保存"), (DesignNode.ItemsKey, "下書き\n名前を付けて"), (DesignNode.ClickKey, "OnSave")]));
+        var lines = Lines(RazorWriter.Write(root));
+        CollectionAssert.AreEqual(new[]
+        {
+            """<RadzenSplitButton Text="保存" Click="OnSave">""",
+            """    <RadzenSplitButtonItem Text="下書き" Value="@("下書き")" />""",
+            """    <RadzenSplitButtonItem Text="名前を付けて" Value="@("名前を付けて")" />""",
+            "</RadzenSplitButton>",
+        }, lines[..4]);
+        CollectionAssert.Contains(lines, "    void OnSave()");
+    }
+
+    [TestMethod]
+    public void Data_に渡す選択肢は_DropDown_以外も配列にする()
+    {
+        var root = Root(Node("ListBox", [(DesignNode.VarKey, "city"), (DesignNode.ItemsKey, "a\nb")]));
+        var lines = Lines(RazorWriter.Write(root));
+        Assert.AreEqual("""<RadzenListBox @bind-Value="city" TValue="string" Data="@cityItems" />""", lines[0]);
+        CollectionAssert.Contains(lines, """    string[] cityItems = ["a", "b"];""");
+    }
+
+    [TestMethod]
+    public void ChildContent_以外で子を受け取る部品は_そのパラメーターのタグで包む()
+    {
+        var root = Root(Node("Tabs", null,
+            Node("TabsItem", [("Text", "タブ1")], Node("Button", [("Text", "OK")])),
+            Node("TabsItem", [("Text", "タブ2")])));
+        CollectionAssert.AreEqual(new[]
+        {
+            "<RadzenTabs>",
+            "    <Tabs>",
+            """        <RadzenTabsItem Text="タブ1">""",
+            """            <RadzenButton Text="OK" />""",
+            "        </RadzenTabsItem>",
+            """        <RadzenTabsItem Text="タブ2" />""",
+            "    </Tabs>",
+            "</RadzenTabs>",
+        }, Lines(RazorWriter.Write(root)));
+    }
+
+    [TestMethod]
+    public void メニューの項目はタグの中に入れ子で並べる()
+    {
+        var root = Root(Node("Menu", null,
+            Node("MenuItem", [("Text", "製品")], Node("MenuItem", [("Text", "一覧")]))));
+        CollectionAssert.AreEqual(new[]
+        {
+            "<RadzenMenu>",
+            """    <RadzenMenuItem Text="製品">""",
+            """        <RadzenMenuItem Text="一覧" />""",
+            "    </RadzenMenuItem>",
+            "</RadzenMenu>",
+        }, Lines(RazorWriter.Write(root)));
+    }
+
+    [TestMethod]
+    public void キャンバス用の仮の値はコードに出さない()
+    {
+        var root = Root(Node("Image", [("AlternateText", "画像")]));
+        Assert.AreEqual("""<RadzenImage AlternateText="画像" />""", Lines(RazorWriter.Write(root))[0]);
+    }
+
+    [TestMethod]
+    public void ジェネリックの型は_型引数も色を分ける()
+    {
+        var code = RazorWriter.Write(Root(Node("CheckBoxList", [(DesignNode.VarKey, "tags")])));
+        var field = code.Lines.Single(l => string.Concat(l.Select(t => t.Text)) == "    IEnumerable<string>? tags;");
+        CollectionAssert.Contains(field.ToList(), new Token(TokenKind.Type, "IEnumerable"));
+        CollectionAssert.Contains(field.ToList(), new Token(TokenKind.Keyword, "string"));
+    }
+
+    [TestMethod]
     public void 同じ変数名の入力部品は番号を付けて分ける()
     {
         var root = Root(

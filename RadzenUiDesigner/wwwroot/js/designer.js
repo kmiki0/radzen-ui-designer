@@ -9,8 +9,12 @@
 // 「部品を選ぶ」「部品を動かす」に置き換える（プレビュー中は止めない）。部品は data-dz-* 属性で見分ける。
 //   data-dz-id        部品の Id（ルートは "root"）
 //   data-dz-tag       部品のタグ名（RadzenButton）
-//   data-dz-container 子を入れられる部品
-//   data-dz-selected  選んでいる部品（フレームごとに 1 つずつある）
+//   data-dz-kind      部品の種類（Button、TabsItem など）
+//   data-dz-item      タブなどの決まった子の部品（決まった親の中にだけ置ける）
+//   data-dz-container 子を入れられる部品（タブの中身は、中身を包む div に付く）
+//   data-dz-accept    子の種類が決まった入れ物の、入れられる種類（Tabs なら TabsItem）
+//   data-dz-sel       選んでいる部品の Id（画面全体の .dz-app に付く）。部品には印を付けない。
+//                     ステップの見出しのように親の部品が描く要素は、属性の反映が 1 回遅れて古い印が残るため
 //   data-dz-frame     フレーム（値は画面の種類）
 //   data-dz-palette   部品パネルの項目（値は部品の種類）
 //   data-dz-tree      レイヤーの項目・選択ラベル（値は部品の Id）
@@ -62,6 +66,11 @@ export function init(app, dotnet) {
   const inViewport = el => el instanceof Element && !!viewport()?.contains(el);
   const isPreview = () => app.hasAttribute("data-preview");
   const activeFrame = () => { const all = frames(); return all.find(f => f.dataset.dzFrame === activeKey) ?? all[0] ?? null; };
+  // フレームの中の、選んでいる部品の要素。タブのように同じ Id が 2 か所（見出しと中身）にあれば、先にある見出しを使う
+  const selectedIn = f => {
+    const id = app.dataset.dzSel;
+    return f && id ? f.querySelector(`[data-dz-id="${CSS.escape(id)}"]`) : null;
+  };
 
   const indicator = document.createElement("div");
   indicator.className = "dz-indicator";
@@ -250,7 +259,7 @@ export function init(app, dotnet) {
 
     const selBox = host.querySelector(".dz-ov-sel");
     const hovBox = host.querySelector(".dz-ov-hover");
-    const sel = current?.querySelector("[data-dz-selected]");
+    const sel = selectedIn(current);
     const busy = !!drag?.active || !!pan;
 
     if (sel && !busy && !isPreview()) {
@@ -259,6 +268,8 @@ export function init(app, dotnet) {
       const move = selBox.querySelector("[data-dz-move]");
       move.dataset.dzTree = sel.dataset.dzId;
       move.dataset.dzLabel = sel.dataset.dzTag ?? "";
+      move.dataset.dzKind = sel.dataset.dzKind ?? "";
+      move.dataset.dzItem = sel.dataset.dzItem ?? "";
     } else {
       selBox.style.display = "none";
     }
@@ -334,7 +345,7 @@ export function init(app, dotnet) {
     // 大きさを変えるつまみ
     const handle = t.closest("[data-dz-resize]");
     if (handle) {
-      const el = activeFrame()?.querySelector("[data-dz-selected]");
+      const el = selectedIn(activeFrame());
       if (!el) return;
       e.preventDefault();
       const r = el.getBoundingClientRect();
@@ -360,13 +371,13 @@ export function init(app, dotnet) {
       activate(t);
       const node = t.closest("[data-dz-id]");
       const id = node?.dataset.dzId ?? "root";
-      drag = { source: "node", key: id, label: node?.dataset.dzTag ?? "", x: e.clientX, y: e.clientY, fromCanvas: true, active: false };
+      drag = { source: "node", key: id, label: node?.dataset.dzTag ?? "", ...kindOf(node), x: e.clientX, y: e.clientY, fromCanvas: true, active: false };
       return;
     }
     const pal = t.closest("[data-dz-palette]");
     const tree = t.closest("[data-dz-tree]");
-    if (pal) { drag = { source: "palette", key: pal.dataset.dzPalette, label: pal.dataset.dzLabel, x: e.clientX, y: e.clientY, active: false }; return; }
-    if (tree) { drag = { source: "node", key: tree.dataset.dzTree, label: tree.dataset.dzLabel, x: e.clientX, y: e.clientY, active: false }; return; }
+    if (pal) { drag = { source: "palette", key: pal.dataset.dzPalette, label: pal.dataset.dzLabel, kind: pal.dataset.dzPalette, item: false, x: e.clientX, y: e.clientY, active: false }; return; }
+    if (tree) { drag = { source: "node", key: tree.dataset.dzTree, label: tree.dataset.dzLabel, ...kindOf(tree), x: e.clientX, y: e.clientY, active: false }; return; }
 
     // フレームの名前や余白は、ドラッグで移動、クリックで選択を外す
     if (inViewport(t)) {
@@ -541,6 +552,18 @@ export function init(app, dotnet) {
   }
 
   // ---- ドロップ先を決める
+  // ドラッグしている部品の種類と、タブなどの決まった子の部品か（data-dz-kind・data-dz-item）
+  function kindOf(el) {
+    return { kind: el?.dataset.dzKind ?? "", item: el?.dataset.dzItem === "1" };
+  }
+
+  // 入れ物に、ドラッグしている部品を入れられるか。子の種類が決まった入れ物（タブ切り替えなど）は
+  // data-dz-accept に入れられる種類を持つ。ほかの入れ物には、決まった子の部品（タブなど）は入れない
+  function accepts(container, d) {
+    const list = container.dataset.dzAccept;
+    return list ? list.split(",").includes(d.kind) : !d.item;
+  }
+
   function childrenOf(container) {
     const seen = new Set();
     return [...container.querySelectorAll("[data-dz-id]")].filter(el => {
@@ -553,6 +576,11 @@ export function init(app, dotnet) {
   }
 
   function isHorizontal(container, kids) {
+    // 2 つ以上あれば、最初の 2 つの位置で決める（タブの見出しは li の中の button なので、親の display では分からない）
+    if (kids.length >= 2) {
+      const a = kids[0].getBoundingClientRect(), b = kids[1].getBoundingClientRect();
+      return b.left >= a.right - 1 && b.top < a.bottom;
+    }
     const host = kids[0]?.parentElement ?? container;
     const cs = getComputedStyle(host);
     return cs.display.includes("flex") && cs.flexDirection.startsWith("row");
@@ -567,16 +595,21 @@ export function init(app, dotnet) {
     if (!container || !scr.contains(container)) container = scr.querySelector("[data-dz-id='root']");
     if (!container) return null;
 
-    // 自分自身や自分の子孫には入れられない。その場合は自分の親に入れる
+    // 自分自身や自分の子孫には入れられない。その場合は外側の入れ物に入れる。
+    // タブは見出しと中身の 2 か所に同じ Id があるので、どちらの中も避ける
+    const outer = c => c.parentElement?.closest("[data-dz-container]");
     if (drag.source === "node") {
-      const self = scr.querySelector(`[data-dz-id="${CSS.escape(drag.key)}"]`);
-      while (self && container && (container === self || self.contains(container)))
-        container = self.parentElement?.closest("[data-dz-container]");
-      if (!container) return null;
+      const selves = [...scr.querySelectorAll(`[data-dz-id="${CSS.escape(drag.key)}"]`)];
+      while (container && selves.some(s => container === s || s.contains(container))) container = outer(container);
     }
+    // 入れられない入れ物（タブ切り替えの中にボタンなど）なら、外側へたどる
+    while (container && !accepts(container, drag)) container = outer(container);
+    if (!container) return null;
 
-    const kids = childrenOf(container).filter(k => k.dataset.dzId !== drag.key);
-    const horizontal = isHorizontal(container, kids);
+    // 並びの向きは、動かしている部品も含めて決める（2 つのタブの 1 つを動かすと、残りが 1 つになるため）
+    const all = childrenOf(container);
+    const horizontal = isHorizontal(container, all);
+    const kids = all.filter(k => k.dataset.dzId !== drag.key);
     let index = kids.length;
     for (let i = 0; i < kids.length; i++) {
       const b = kids[i].getBoundingClientRect();

@@ -97,6 +97,85 @@ public sealed class DesignDocumentTests
     }
 
     [TestMethod]
+    public void Add_タブ切り替えは_タブを2つ入れて置く()
+    {
+        var doc = NewDoc();
+        var tabs = doc.Add("Tabs")!;
+        CollectionAssert.AreEqual(new[] { "TabsItem", "TabsItem" }, tabs.Children.Select(c => c.Kind).ToArray());
+        CollectionAssert.AreEqual(new[] { "タブ1", "タブ2" }, tabs.Children.Select(c => c.Props["Text"]).ToArray());
+    }
+
+    [TestMethod]
+    public void Add_タブ切り替えを選んでいれば_ボタンはその後ろに入れ_タブを選んでいればタブの中に入れる()
+    {
+        var doc = NewDoc();
+        var tabs = doc.Add("Tabs")!;
+        var after = doc.Add("Button")!;
+        CollectionAssert.AreEqual(new[] { tabs.Id, after.Id }, doc.Root.Children.Select(c => c.Id).ToArray());
+
+        doc.Select(tabs.Children[1].Id);
+        var inside = doc.Add("Button")!;
+        Assert.AreSame(tabs.Children[1], doc.Root.FindParent(inside.Id));
+
+        // タブの中の部品を選んでいるときも、そのタブの中（部品の後ろ）に入る
+        var next = doc.Add("Text")!;
+        CollectionAssert.AreEqual(new[] { inside.Id, next.Id }, tabs.Children[1].Children.Select(c => c.Id).ToArray());
+    }
+
+    [TestMethod]
+    public void Drop_タブ切り替えにはタブだけ_タブはタブ切り替えにだけ入れられる()
+    {
+        var doc = NewDoc();
+        var first = doc.Add("Tabs")!;
+        doc.Select(null);
+        var second = doc.Add("Tabs")!;
+
+        Assert.IsFalse(doc.Drop("palette", "Button", first.Id, 0), "タブ切り替えの中にボタンは入れない");
+        Assert.IsFalse(doc.Drop("node", first.Children[0].Id, "root", 0), "タブはページに出せない");
+        Assert.IsFalse(doc.Drop("palette", "TabsItem", "root", 0));
+
+        // 別のタブ切り替えには動かせる
+        var moving = first.Children[0];
+        Assert.IsTrue(doc.Drop("node", moving.Id, second.Id, 0));
+        Assert.HasCount(1, first.Children);
+        Assert.AreSame(second, doc.Root.FindParent(moving.Id));
+    }
+
+    [TestMethod]
+    public void AddItem_親を選べば最後に_項目を選べば後ろに_番号付きで足す()
+    {
+        var doc = NewDoc();
+        var tabs = doc.Add("Tabs")!;
+        var third = doc.AddItem(inside: true)!;
+        Assert.AreEqual("タブ3", third.Props["Text"]);
+        Assert.AreSame(third, tabs.Children[2]);
+        Assert.AreEqual(third.Id, doc.SelectedId);
+
+        doc.Select(tabs.Children[0].Id);
+        var fourth = doc.AddItem(inside: false)!;
+        Assert.AreEqual("タブ4", fourth.Props["Text"]);
+        Assert.AreSame(fourth, tabs.Children[1]);
+
+        // タブの中に「中に足す」はない（タブの中身は自由な部品）
+        Assert.IsNull(doc.AddItem(inside: true));
+        // 普通の部品では何もしない
+        doc.Select(null);
+        doc.Select(doc.Add("Button")!.Id);
+        Assert.IsNull(doc.AddItem(inside: false));
+    }
+
+    [TestMethod]
+    public void AddItem_メニューの項目には_サブメニューを足せる()
+    {
+        var doc = NewDoc();
+        var menu = doc.Add("Menu")!;
+        doc.Select(menu.Children[1].Id);
+        var sub = doc.AddItem(inside: true)!;
+        Assert.AreEqual("MenuItem", sub.Kind);
+        Assert.AreSame(menu.Children[1], doc.Root.FindParent(sub.Id));
+    }
+
+    [TestMethod]
     public void DeleteSelected_隣を選び_最後の1つなら親を選ぶ()
     {
         var (a, b) = (Node("Text"), Node("Button"));

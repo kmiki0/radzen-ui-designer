@@ -98,18 +98,13 @@ public sealed class DesignDocument
 
     // ---- 部品の追加・移動・削除
     /// <summary>
-    /// 部品を追加する。選んでいる部品が入れ物ならその中の最後に、そうでなければその後ろに入れる。
+    /// 部品を追加する。選んでいる部品の中に入れられればその中の最後に、そうでなければその後ろに入れる。
+    /// 後ろにも入れられないとき（タブ切り替えの中の、タブの隣など）は、外側へたどって入れられる所を探す。
     /// </summary>
     public DesignNode? Add(string kind)
     {
-        if (!ComponentCatalog.TryGet(kind, out _)) return null;
-        DesignNode parent = Root;
-        var index = Root.Children.Count;
-        if (Selected is { } sel)
-        {
-            if (ComponentCatalog.IsContainer(sel)) { parent = sel; index = sel.Children.Count; }
-            else if (Root.FindParent(sel.Id) is { } p) { parent = p; index = p.Children.IndexOf(sel) + 1; }
-        }
+        if (!ComponentCatalog.TryGet(kind, out _) || PlaceFor(kind) is not { } place) return null;
+        var (parent, index) = place;
         Snapshot();
         var node = CreateNode(kind);
         parent.Children.Insert(index, node);
@@ -118,19 +113,63 @@ public sealed class DesignDocument
         return node;
     }
 
+    (DesignNode Parent, int Index)? PlaceFor(string kind)
+    {
+        var sel = Selected;
+        if (sel is not null && ComponentCatalog.CanContain(sel, kind)) return (sel, sel.Children.Count);
+        for (var n = sel; n is not null && n != Root; )
+        {
+            var p = Root.FindParent(n.Id)!;
+            if (ComponentCatalog.CanContain(p, kind)) return (p, p.Children.IndexOf(n) + 1);
+            n = p;
+        }
+        return ComponentCatalog.CanContain(Root, kind) ? (Root, Root.Children.Count) : null;
+    }
+
+    /// <summary>
+    /// タブなどの決まった子の部品を足す。inside なら選んでいる部品の中の最後に（タブ切り替えにタブを足す）、
+    /// そうでなければ選んでいる項目の後ろに足す（タブの後ろにタブを足す）。見出しには番号を付ける。
+    /// </summary>
+    public DesignNode? AddItem(bool inside)
+    {
+        if (Selected is not { } sel || !ComponentCatalog.TryGet(sel.Kind, out var def)) return null;
+        DesignNode parent;
+        int index;
+        string kind;
+        if (inside)
+        {
+            if (def.ChildKinds is not [var k, ..]) return null;
+            (parent, index, kind) = (sel, sel.Children.Count, k);
+        }
+        else
+        {
+            if (!def.IsItem || Root.FindParent(sel.Id) is not { } p) return null;
+            (parent, index, kind) = (p, p.Children.IndexOf(sel) + 1, sel.Kind);
+        }
+        Snapshot();
+        var node = CreateNode(kind);
+        if (node.Props.TryGetValue("Text", out var text))
+            node.Props["Text"] = text + (parent.Children.Count(c => c.Kind == kind) + 1);
+        parent.Children.Insert(index, node);
+        SelectedId = node.Id;
+        Commit();
+        return node;
+    }
+
     /// <summary>
     /// ドラッグ＆ドロップ。source が "palette" なら key の種類の部品を新しく作り、
-    /// "node" なら key の Id の部品を動かす。自分自身や自分の子孫の中には動かせない。
+    /// "node" なら key の Id の部品を動かす。自分自身や自分の子孫の中と、入れられない入れ物
+    /// （タブ切り替えの中にボタンなど）には動かせない。
     /// </summary>
     public bool Drop(string source, string key, string parentId, int index)
     {
         var parent = Root.Find(parentId);
-        if (parent is null || !ComponentCatalog.IsContainer(parent)) return false;
+        if (parent is null) return false;
 
         DesignNode node;
         if (source == "palette")
         {
-            if (!ComponentCatalog.TryGet(key, out _)) return false;
+            if (!ComponentCatalog.CanContain(parent, key)) return false;
             Snapshot();
             node = CreateNode(key);
         }
@@ -138,7 +177,8 @@ public sealed class DesignDocument
         {
             var moving = Root.Find(key);
             var oldParent = Root.FindParent(key);
-            if (moving is null || oldParent is null || moving.SelfAndDescendants().Contains(parent)) return false;
+            if (moving is null || oldParent is null || moving.SelfAndDescendants().Contains(parent)
+                || !ComponentCatalog.CanContain(parent, moving.Kind)) return false;
             Snapshot();
             oldParent.Children.Remove(moving);
             node = moving;
@@ -272,11 +312,18 @@ public sealed class DesignDocument
     }
 
     // ---- 部品を作る
+    /// <summary>部品を作る。決まった子の部品（タブ切り替えのタブなど）も一緒に作る。</summary>
     DesignNode CreateNode(string kind)
     {
         ComponentCatalog.TryGet(kind, out var def);
         var node = new DesignNode { Kind = kind, Props = new(def!.Initial) };
         if (def.FieldType is not null) node.Props[DesignNode.VarKey] = NewVar(kind);
+        foreach (var (childKind, props) in def.InitialChildren)
+        {
+            var child = CreateNode(childKind);
+            foreach (var (k, v) in props) child.Props[k] = v;
+            node.Children.Add(child);
+        }
         return node;
     }
 
