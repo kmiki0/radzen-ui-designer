@@ -35,6 +35,15 @@
     <div class="dz-pbody" @key="node.Id">
         @if (tab == "props")
         {
+            @if (ItemActions(def) is { Count: > 0 } actions)
+            {
+                <div class="dz-item-actions">
+                    @foreach (var (label, inside) in actions)
+                    {
+                        <button type="button" class="dz-foot-btn" @onclick="() => Doc.AddItem(inside)"><RadzenIcon Icon="add" />@label</button>
+                    }
+                </div>
+            }
             @if (Section(__builder, "basic", "主なプロパティ"))
             {
                 foreach (var p in def.Props.Where(p => p.IsMain)) PropRow(__builder, node, p);
@@ -50,7 +59,7 @@
                     if (def.HasItems)
                     {
                         <div class="dz-row dz-row-wide">
-                            <label><span>選択肢</span><code>1 行に 1 つ</code></label>
+                            <label><span>@def.ItemsLabel</span><code>1 行に 1 つ</code></label>
                             <textarea class="dz-input" rows="4" value="@node.Props.GetValueOrDefault(DesignNode.ItemsKey)"
                                       @oninput="e => Doc.SetRaw(node, DesignNode.ItemsKey, e.Value?.ToString())"></textarea>
                         </div>
@@ -145,11 +154,37 @@
 
     static string DefaultText(PropDef p) => p.Default is null or "" ? "" : p.Default;
 
-    /// <summary>パラメーター 1 つ。bool はオフ・オン、3 つまでの列挙型はボタン、それより多ければ一覧、ほかは入力欄。</summary>
+    /// <summary>
+    /// タブなどの決まった子の部品を足すボタン（文字と、中に足すか）。タブ切り替えなら「タブを足す」、
+    /// タブなら「後ろにタブを足す」。メニューの項目は、中（サブメニュー）にも後ろにも足せる。
+    /// </summary>
+    static List<(string Label, bool Inside)> ItemActions(ComponentDef def)
+    {
+        var list = new List<(string, bool)>();
+        if (def.ChildKinds is [var kind, ..] && ComponentCatalog.TryGet(kind, out var child))
+            list.Add((def.IsItem ? $"中に{child.Label}を足す" : $"{child.Label}を足す", true));
+        if (def.IsItem)
+            list.Add(($"後ろに{def.Label}を足す", false));
+        return list;
+    }
+
+    /// <summary>
+    /// パラメーター 1 つ。bool はオフ・オン、3 つまでの列挙型はボタン、それより多ければ一覧、ほかは入力欄。
+    /// 複数行のもの（Markdown の本文など）は、名前の下に広い入力欄を置く。
+    /// </summary>
     void PropRow(RenderTreeBuilder __builder, DesignNode node, PropDef p)
     {
         var stored = node.Props.GetValueOrDefault(p.Name);
         var effective = stored ?? p.Default;
+        if (p.IsMultiline)
+        {
+            <div class="dz-row dz-row-wide @(stored is not null ? "set" : "")">
+                <label title="@($"{p.Label}（{p.Name}）")"><span>@p.Label</span><code>@p.Name</code></label>
+                <textarea class="dz-input" rows="6" value="@stored" placeholder="@DefaultText(p)"
+                          @oninput="e => Doc.SetProp(node, p, e.Value?.ToString())"></textarea>
+            </div>
+            return;
+        }
         <div class="dz-row @(stored is not null ? "set" : "")">
             <label title="@($"{p.Label}（{p.Name}）")"><span>@p.Label</span><code>@p.Name</code></label>
             <div class="dz-ctl">

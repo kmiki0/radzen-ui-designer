@@ -570,6 +570,9 @@ body.dz-dragging .dz-overlay, body.dz-dragging .dz-overlay * { pointer-events: n
 .dz-row.set > label span { font-weight: 500; color: var(--dz-primary); }
 .dz-row-wide { grid-template-columns: 1fr; }
 .dz-row-wide textarea { height: auto; padding: 6px 10px; resize: vertical; }
+/* タブなどの項目を足すボタン */
+.dz-item-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 2px; }
+.dz-item-actions .dz-foot-btn { flex: 1 1 auto; padding: 0 12px; }
 .dz-ctl { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .dz-ctl > .dz-input { flex: 1; width: 100%; }
 .dz-input {

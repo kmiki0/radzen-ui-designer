@@ -9,7 +9,7 @@
    ほかの操作パネルはキャンバスの上に浮かせる。色は Radzen のテーマの変数（--rz-*）を使う。
    キャンバスの移動・拡大縮小・選択・ドラッグは designer.js が行い、編集の処理は DesignDocument が行う。 *@
 <div class="dz-app @(sideOpen ? "" : "side-closed") @(InspectorOpen ? "has-insp" : "")" style="--dz-bottom-h: @(BottomHeight)px"
-     data-preview="@(preview ? "1" : null)" @ref="appEl">
+     data-preview="@(preview ? "1" : null)" data-dz-sel="@doc.SelectedId" @ref="appEl">
 
     <DesignerSidebar Doc="doc" Hidden="preview" @bind-Open="sideOpen" @bind-Tab="sideTab" OnReplaced="RequestFit" />
 

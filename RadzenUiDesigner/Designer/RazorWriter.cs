@@ -105,7 +105,7 @@ public static partial class RazorWriter
     sealed class Context
     {
         public readonly Dictionary<string, string> Vars = new();        // ノードの Id → @bind-Value の変数名
-        public readonly Dictionary<string, string> ItemsFields = new(); // ノードの Id → 選択肢の配列の名前（DropDown）
+        public readonly Dictionary<string, string> ItemsFields = new(); // ノードの Id → 選択肢の配列の名前（Data に渡す部品）
         public readonly Dictionary<string, string> MethodOf = new();    // ノードの Id → Click のメソッド名
         public readonly List<(string Type, string Name, IReadOnlyList<string>? Items)> Fields = new();
         public readonly List<string> Methods = new();
@@ -124,7 +124,7 @@ public static partial class RazorWriter
             var name = Unique(Sanitize(n.Props.GetValueOrDefault(DesignNode.VarKey), LowerFirst(def.Key)), used);
             ctx.Vars[n.Id] = name;
             ctx.Fields.Add((def.FieldType, name, null));
-            if (def.Key == "DropDown")
+            if (def.ItemsMode == ItemsMode.Data)
             {
                 var items = Unique(name + "Items", used);
                 ctx.ItemsFields[n.Id] = items;
@@ -206,26 +206,39 @@ public static partial class RazorWriter
         if (ctx.MethodOf.GetValueOrDefault(n.Id) is { } m)
             Attr(b, TokenKind.Attr, "Click", () => b.Add(TokenKind.Method, m));
 
-        IReadOnlyList<string> items = def.Key == "RadioButtonList" ? n.Items : [];
+        // 選択肢を部品として書くもの（Data に渡すものは @code の配列にする）
+        IReadOnlyList<string> items = def.ItemsMode is ItemsMode.Items or ItemsMode.ChildItems ? n.Items : [];
 
         if (def.IsContainer && n.Children.Count > 0)
         {
             b.Add(TokenKind.Punct, ">").NewLine();
-            foreach (var c in n.Children) WriteNode(b, c, depth + 1, ctx);
+            // ChildContent 以外で子を受け取る部品（Tabs の Tabs など）は、そのパラメーターのタグで包む
+            var slot = def.ChildSlot != "ChildContent";
+            if (slot)
+                b.Plain(pad + "    ").Add(TokenKind.Punct, "<").Add(TokenKind.Param, def.ChildSlot).Add(TokenKind.Punct, ">").NewLine();
+            foreach (var c in n.Children) WriteNode(b, c, depth + (slot ? 2 : 1), ctx);
+            if (slot)
+                Close(b, pad + "    ", TokenKind.Param, def.ChildSlot);
             Close(b, pad, TokenKind.Tag, def.TagName);
         }
         else if (items.Count > 0)
         {
             b.Add(TokenKind.Punct, ">").NewLine();
-            b.Plain(pad + "    ").Add(TokenKind.Punct, "<").Add(TokenKind.Param, "Items").Add(TokenKind.Punct, ">").NewLine();
+            // Items の部品は <Items> の中に、ChildItems の部品はタグの中にそのまま並べる
+            var inItems = def.ItemsMode == ItemsMode.Items;
+            var itemPad = pad + (inItems ? "        " : "    ");
+            if (inItems)
+                b.Plain(pad + "    ").Add(TokenKind.Punct, "<").Add(TokenKind.Param, "Items").Add(TokenKind.Punct, ">").NewLine();
             foreach (var item in items)
             {
-                b.Plain(pad + "        ").Add(TokenKind.Punct, "<").Add(TokenKind.Tag, "RadzenRadioButtonListItem");
+                b.Plain(itemPad).Add(TokenKind.Punct, "<").Add(TokenKind.Tag, def.ItemTag!);
                 Attr(b, TokenKind.Attr, "Text", () => StringValue(b, item));
+                // Value が object や TValue の部品もあるので、文字列は C# の式で渡す
                 Attr(b, TokenKind.Attr, "Value", () => b.Add(TokenKind.Razor, "@").Plain("(").Add(TokenKind.Str, CsString(item)).Plain(")"));
                 b.Add(TokenKind.Punct, " />").NewLine();
             }
-            Close(b, pad + "    ", TokenKind.Param, "Items");
+            if (inItems)
+                Close(b, pad + "    ", TokenKind.Param, "Items");
             Close(b, pad, TokenKind.Tag, def.TagName);
         }
         else
@@ -265,9 +278,21 @@ public static partial class RazorWriter
             b.Add(TokenKind.Str, s);
     }
 
-    /// <summary>型名（"string?"、"DateTime?"、"string[]"）。C# のキーワードの型とそれ以外で色を分ける。</summary>
+    /// <summary>
+    /// 型名（"string?"、"DateTime?"、"string[]"、"IEnumerable&lt;string&gt;?"）。C# のキーワードの型とそれ以外で色を分ける。
+    /// ジェネリックの型は、型引数も同じように分ける。
+    /// </summary>
     static void TypeName(Builder b, string type)
     {
+        var open = type.IndexOf('<');
+        var close = type.LastIndexOf('>');
+        if (open > 0 && close > open)
+        {
+            b.Add(TokenKind.Type, type[..open]).Plain("<");
+            TypeName(b, type[(open + 1)..close]);
+            b.Plain(type[close..]);
+            return;
+        }
         var core = type.TrimEnd('?', '[', ']');
         b.Add(TypeKeywords.Contains(core) ? TokenKind.Keyword : TokenKind.Type, core).Plain(type[core.Length..]);
     }
