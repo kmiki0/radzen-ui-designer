@@ -92,7 +92,7 @@
             </div>
         </div>
 
-        <CodePanel Doc="doc" Hidden="preview" @bind-Open="codeOpen" CopyText="CopyText" />
+        <CodePanel Doc="doc" Hidden="preview" @bind-Open="codeOpen" CopyText="CopyText" RevealLine="RevealCodeLine" />
     </div>
 </div>
 
@@ -230,6 +230,11 @@
     }
 
     async Task<bool> CopyText(string text) => module is not null && await module.InvokeAsync<bool>("copyText", text);
+
+    async Task RevealCodeLine(ElementReference textarea, int line)
+    {
+        if (module is not null) await module.InvokeVoidAsync("revealLine", textarea, line);
+    }
 
     public async ValueTask DisposeAsync()
     {

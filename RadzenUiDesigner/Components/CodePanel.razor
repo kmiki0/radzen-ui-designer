@@ -1,6 +1,7 @@
 @* 下のボトムバー。生成したコードを、種類ごとに色を分けて出す。
    見出しを押すと開閉し、開いているときは上の縁をドラッグで高さを変える（ドラッグは designer.js が data-dz-split を見て行う）。
-   選んだ部品の行に色を付け、行をクリックするとその行の部品を選ぶ（クリックは designer.js が data-dz-node を見て行う）。 *@
+   選んだ部品の行に色を付け、行をクリックするとその行の部品を選ぶ（クリックは designer.js が data-dz-node を見て行う）。
+   「編集」を押すとコードを書き換えられる。「反映」で RazorReader がコードを読み、部品の木を丸ごと入れ替える（元に戻せる）。 *@
 
 @if (Hidden)
 {
@@ -15,14 +16,77 @@
     <div class="dz-bottom-bar" title="@(Open ? "コードを畳む" : "コードを開く")" @onclick="() => OpenChanged.InvokeAsync(!Open)">
         <span class="dz-bottom-tab"><RadzenIcon Icon="code" />コード</span>
         <span class="dz-bottom-file">ページ.razor</span>
-        <small>@Code.Lines.Count 行</small>
+        @if (editing)
+        {
+            <small class="dz-bottom-state">編集中 · @DraftLines 行</small>
+        }
+        else
+        {
+            <small>@(Applied ? "反映しました · " : "")@Code.Lines.Count 行</small>
+        }
         <div class="dz-fill"></div>
-        <button type="button" class="dz-tbtn" disabled="@(Doc.Root.Children.Count == 0)" @onclick="Copy" @onclick:stopPropagation="true">
-            <RadzenIcon Icon="@(Copied ? "check" : "content_copy")" />@(Copied ? "コピーしました" : "コピー")
-        </button>
+        @if (editing)
+        {
+            <button type="button" class="dz-tbtn solid" title="コードを読んで、キャンバスの部品に反映する（Ctrl+Enter）"
+                    @onclick="Apply" @onclick:stopPropagation="true">
+                <RadzenIcon Icon="check" />反映
+            </button>
+            <button type="button" class="dz-tbtn" title="書き換えたコードを捨てて、編集をやめる"
+                    @onclick="Cancel" @onclick:stopPropagation="true">
+                <RadzenIcon Icon="close" />やめる
+            </button>
+        }
+        else
+        {
+            <button type="button" class="dz-tbtn" title="コードを書き換えて、キャンバスに反映する"
+                    @onclick="StartEdit" @onclick:stopPropagation="true">
+                <RadzenIcon Icon="edit" />編集
+            </button>
+            <button type="button" class="dz-tbtn" disabled="@(Doc.Root.Children.Count == 0)" @onclick="Copy" @onclick:stopPropagation="true">
+                <RadzenIcon Icon="@(Copied ? "check" : "content_copy")" />@(Copied ? "コピーしました" : "コピー")
+            </button>
+        }
         <span class="dz-bottom-chev"><RadzenIcon Icon="@(Open ? "keyboard_arrow_down" : "keyboard_arrow_up")" /></span>
     </div>
-    @if (Open)
+    @if (Open && editing)
+    {
+        <div class="dz-code-edit">
+            @if (errors.Count > 0)
+            {
+                <div class="dz-code-msg err" role="alert">
+                    <div><RadzenIcon Icon="error" />反映できませんでした。次の所を直してください（行番号を押すと、その行へ移ります）。</div>
+                    <ul>
+                        @foreach (var e in errors)
+                        {
+                            <li><button type="button" title="この行へ移る" @onclick="() => RevealAsync(e.Line)">@e.Line 行目</button>@e.Message</li>
+                        }
+                    </ul>
+                </div>
+            }
+            else
+            {
+                <div class="dz-code-msg">
+                    書き換えたら「反映」（Ctrl+Enter）を押すと、キャンバスに反映します。読めるのはデザイナーにある Radzen の部品だけで、@@code の中は選択肢の配列だけを読みます。
+                </div>
+            }
+            @if (Code.Text != baseText)
+            {
+                <div class="dz-code-msg warn">編集を始めた後に、キャンバスで変更がありました。反映すると、その変更は消えます。</div>
+            }
+            <div class="dz-code-scroll">
+                <div class="dz-code-gutter" aria-hidden="true">
+                    @for (var i = 1; i <= DraftLines; i++)
+                    {
+                        <div class="@(errorLines.Contains(i) ? "err" : null)">@i</div>
+                    }
+                </div>
+                <textarea class="dz-code-input" spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off" aria-label="コード"
+                          rows="@DraftLines" style="width: @(DraftWidth)ch" @ref="input"
+                          @bind="draft" @bind:event="oninput" @onkeydown="OnKeyDown"></textarea>
+            </div>
+        </div>
+    }
+    else if (Open)
     {
         <div class="dz-source-code">
             @{ var sel = Doc.SelectedId is { } id && Code.Ranges.TryGetValue(id, out var r) ? r : (LineRange?)null; }
@@ -57,16 +121,88 @@
     /// <summary>文字をクリップボードに写す。写せたら true。</summary>
     [Parameter, EditorRequired] public Func<string, Task<bool>> CopyText { get; set; } = default!;
 
+    /// <summary>編集欄の、指定した行（1 から）を選んで見せる。</summary>
+    [Parameter, EditorRequired] public Func<ElementReference, int, Task> RevealLine { get; set; } = default!;
+
     GeneratedCode Code => Doc.Code;
 
     // 写した文字。コードが変わったら「コピーしました」を消す
     string? copiedText;
     bool Copied => copiedText is not null && copiedText == Code.Text;
 
+    // ---- 編集
+    bool editing;
+    string draft = "";                  // 書き換えている途中のコード
+    string baseText = "";               // 編集を始めたときのコード（キャンバスで変わったかを見る）
+    IReadOnlyList<ReadError> errors = [];
+    HashSet<int> errorLines = [];
+    string? appliedText;                // 反映して作り直したコード。変わるまで「反映しました」を出す
+    int? revealPending;                 // 次の描画のあとで見せる行（反映できなかったときの、最初の間違い）
+    ElementReference input;
+
+    bool Applied => appliedText is not null && appliedText == Code.Text;
+
+    int DraftLines => draft.Count(c => c == '\n') + 1;
+
+    /// <summary>一番長い行の幅（ch）。全角の文字は 2 文字分と数える。入力欄をこの幅にして、外側でスクロールする。</summary>
+    int DraftWidth => draft.Split('\n').Select(l => l.Sum(c => c < 0x2E80 ? 1 : 2)).DefaultIfEmpty(0).Max() + 2;
+
     async Task Copy()
     {
         var text = Code.Text;
         copiedText = await CopyText(text) ? text : null;
+    }
+
+    async Task StartEdit()
+    {
+        draft = baseText = Code.Text;
+        SetErrors([]);
+        editing = true;
+        if (!Open) await OpenChanged.InvokeAsync(true);
+    }
+
+    void Cancel()
+    {
+        editing = false;
+        SetErrors([]);
+    }
+
+    void Apply()
+    {
+        var result = RazorReader.Read(draft);
+        if (result.Root is null)
+        {
+            SetErrors(result.Errors);
+            revealPending = result.Errors[0].Line;
+            if (!Open) _ = OpenChanged.InvokeAsync(true);
+            return;
+        }
+        SetErrors([]);
+        editing = false;
+        Doc.Replace(result.Root);
+        appliedText = Doc.Code.Text;
+    }
+
+    void SetErrors(IReadOnlyList<ReadError> list)
+    {
+        errors = list;
+        errorLines = list.Select(e => e.Line).ToHashSet();
+    }
+
+    void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (e.CtrlKey || e.MetaKey)) Apply();
+    }
+
+    Task RevealAsync(int line) => RevealLine(input, line);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (revealPending is { } line && editing && Open)
+        {
+            revealPending = null;
+            await RevealAsync(line);
+        }
     }
 
     static string LineClass(int line, LineRange? sel)
